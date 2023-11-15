@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "docxtemplater": "^3.41.0",
+    "element-plus": "^2.4.2",
     "pizzip": "^3.1.4",
     "save-as": "^0.1.8",
     "vue": "^3.3.4",
@@ -17,6 +18,8 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^4.2.3",
+    "unplugin-auto-import": "^0.16.7",
+    "unplugin-vue-components": "^0.25.2",
     "vite": "^4.4.5"
   }
 }
