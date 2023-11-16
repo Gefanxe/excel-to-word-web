@@ -4,8 +4,8 @@ import Test from './components/Test.vue';
 </script>
 
 <template>
-  <Home />
-  <hr>
+  <!-- <Home />
+  <hr> -->
   <Test />
 </template>
 
