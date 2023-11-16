@@ -3,6 +3,7 @@
     "vue.volar",
     "vue.vscode-typescript-vue-plugin",
     "oderwat.indent-rainbow",
-    "antfu.unocss"
+    "antfu.unocss",
+    "orange-001.region-generator"
   ]
 }

@@ -1,6 +1,6 @@
 <script setup>
 import { ref } from 'vue';
-import { genFileId } from 'element-plus';
+import { genFileId, uploadBaseProps } from 'element-plus';
 import xlsx, { read } from 'xlsx';
 import PizZip from "pizzip";
 import Docxtemplater from "docxtemplater";
@@ -41,12 +41,6 @@ const handleSourceChanged = (file) => {
 
 // #region 讀取資料按鈕
 
-function handleReadSourceData() {
-  if (!sourceExcel.value) return alert('沒有來源資料!');
-  // console.log(sourceExcel.value);
-  readData(sourceExcel.value);
-}
-
 function readData(file) {
   const reader = new FileReader();
   reader.readAsArrayBuffer(file);
@@ -68,24 +62,82 @@ function readData(file) {
     console.log(xlsxData);
   };
 }
+
+// 讀取來源
+function handleReadSourceData() {
+  if (!sourceExcel.value) return alert('沒有來源資料!');
+
+  readData(sourceExcel.value);
+}
+
 // #endregion
 
 
 // #region Word模版
 
+/** @type { import('vue').Ref<import('element-plus').UploadInstance> } */
 const uploadWord = ref(null);
-const sourceWord = ref(null);
-const handleWordChanged = (file, files) => {
-  // TODO: 先判斷是否有多個檔案 files.length > 0
-  // console.log('on Changed!', file);
-  if (files[1]) {
 
-    console.log('on Changed! s', files[1].name);
-  }
+/** @type { import('vue').Ref<import('element-plus').UploadRawFile[]> } */
+const sourceWords = ref([]);
+
+/** @type { import('vue').Ref<Docxtemplater<PizZip>[]> } */
+const docxTemps = ref([]);
+
+
+
+/**
+ * 將檔案讀取至 buffer
+ * @param { import('element-plus').UploadRawFile } f 
+ */
+function readWordToBuffer(f) {
+  const reader = new FileReader();
+  reader.readAsArrayBuffer(f);
+  reader.onload = function (e) {
+    const data = new Uint8Array(reader.result);
+
+    const zip = new PizZip(data);
+    const doc = new Docxtemplater(zip, {
+      paragraphLoop: true,
+      linebreaks: true,
+    });
+    
+    docxTemps.value.push(doc);
+  };
+}
+
+/**
+ * 上傳 Word 發生變化時
+ * @param { import('element-plus').UploadFile } file 
+ * @param { import('element-plus').UploadFiles } files 
+ */
+function handleWordChanged (file, files) {
+  files.forEach((f) => {
+    const fileExt = f.name.replace(/.+\.(.+)/, '$1');
+    if (!/docx/i.test(fileExt)) {
+      uploadWord.value.handleRemove(f);
+      console.log('請上傳 Word 檔, 副檔名必須為 docx! ', f.name);
+    } else {
+      sourceWords.value.push(f.raw);
+    }
+  });
+
+  sourceWords.value.forEach((wordTemp) => {
+    readWordToBuffer(wordTemp);
+  });
+
 };
 
 // #endregion
 
+
+// #region 生成按鈕
+function handleGenerateData () {
+  
+}
+// #endregion
+
+// TODO: 一鍵清除 uploadWord / sourceWords
 
 </script>
 
@@ -96,8 +148,11 @@ const handleWordChanged = (file, files) => {
     <div>
       <h3>來源Excel檔案</h3>
       <div class="float-left">
-        <el-upload ref="uploadSource" drag :limit="1" :auto-upload="false" :on-change="handleSourceChanged" :on-exceed="handleSourceExceed">
-          <el-icon><Plus /></el-icon>
+        <el-upload ref="uploadSource" drag :limit="1" :auto-upload="false" :on-change="handleSourceChanged"
+          :on-exceed="handleSourceExceed">
+          <el-icon>
+            <Plus />
+          </el-icon>
           <div class="el-upload__text">
             將資料來源拖放到此<br>
             或<em>點擊</em>上傳
@@ -119,14 +174,16 @@ const handleWordChanged = (file, files) => {
     </div>
 
     <!-- Excel 模版資料 -->
-    
-    
+
+
     <!-- Word 模版資料 -->
     <div>
       <h3>Word 模版檔案</h3>
       <div class="float-left">
         <el-upload ref="uploadWord" drag :auto-upload="false" :multiple="true" :on-change="handleWordChanged">
-          <el-icon><Plus /></el-icon>
+          <el-icon>
+            <Plus />
+          </el-icon>
           <div class="el-upload__text">
             將資料來源拖放到此<br>
             或<em>點擊</em>上傳
@@ -138,6 +195,11 @@ const handleWordChanged = (file, files) => {
           </template>
         </el-upload>
       </div>
+    </div>
+
+    <!-- 生成資料按鈕 -->
+    <div>
+      <el-button type="primary" @click="handleGenerateData">生成資料</el-button>
     </div>
 
   </div>
