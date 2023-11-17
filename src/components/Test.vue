@@ -133,7 +133,20 @@ function handleWordChanged (file, files) {
 
 // #region 生成按鈕
 function handleGenerateData () {
-  
+  docxTemps.value.forEach((docx) => {
+
+    docx.render({
+      xxxx: '',
+      yyy: ''
+    });
+
+    const buf = docx.getZip().generate({
+      type: 'blob'
+    })
+
+    // TODO: 名字要怎麼取??
+    saveAs(buf, 'newDoc.docx');
+  });
 }
 // #endregion
 
