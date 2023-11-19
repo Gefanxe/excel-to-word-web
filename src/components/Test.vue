@@ -1,10 +1,11 @@
 <script setup>
-import { ref } from 'vue';
-import { genFileId, uploadBaseProps } from 'element-plus';
+import { ref, reactive } from 'vue';
+import { genFileId, switchProps, uploadBaseProps } from 'element-plus';
 import xlsx, { read } from 'xlsx';
 import PizZip from "pizzip";
 import Docxtemplater from "docxtemplater";
 import saveAs from 'save-as';
+import { Plus, Minus } from '@element-plus/icons-vue';
 
 
 // #region 資料來源
@@ -41,33 +42,66 @@ const handleSourceChanged = (file) => {
 
 // #region 讀取資料按鈕
 
-function readData(file) {
-  const reader = new FileReader();
-  reader.readAsArrayBuffer(file);
-  reader.onload = function (e) {
-    const data = new Uint8Array(reader.result);
-    const book = xlsx.read(data, { type: 'array' });
-    const sheets = book.SheetNames[0];
-    const worksheet = book.Sheets[sheets];
+const modeSwitch = ref(false);
 
-    const opts = {
-      header: 'A',    // 沒有標題, 使用A,B,C....
-      range: 4,       // 跳過幾行才開始解析
-      // range: 'A5:E6',     //限定範圍
-      defval: ''      // 使用指定的值替代null或者undefined
-    };
+const singleFields = reactive([
+  {
+    xlsxCol: 'A1',
+    value: ''
+  }
+]);
 
-    // 整個工作表輸出 json
-    const xlsxData = xlsx.utils.sheet_to_json(worksheet, opts);
-    console.log(xlsxData);
+function handleColAdd() {
+  singleFields.push({
+    xlsxCol: '',
+    value: ''
+  });
+}
+
+function handleColSub() {
+  singleFields.pop();
+}
+
+function readDataRange(worksheet) {
+  const opts = {
+    header: 'A',    // 沒有標題, 使用A,B,C....
+    range: 4,       // 跳過幾行才開始解析
+    // range: 'A5:E6',     //限定範圍
+    defval: ''      // 使用指定的值替代null或者undefined
   };
+
+  // 整個工作表輸出 json
+  const xlsxData = xlsx.utils.sheet_to_json(worksheet, opts);
+  console.log(xlsxData);
+}
+
+function readSingle(worksheet) {
+  for (let i = 0; i < singleFields.length; i++) {
+    const item = singleFields[i];
+    item.value = worksheet[item.xlsxCol].v;
+  }
 }
 
 // 讀取來源
 function handleReadSourceData() {
   if (!sourceExcel.value) return alert('沒有來源資料!');
 
-  readData(sourceExcel.value);
+  const reader = new FileReader();
+  reader.readAsArrayBuffer(sourceExcel.value);
+  reader.onload = function (e) {
+    const data = new Uint8Array(reader.result);
+    const book = xlsx.read(data, { type: 'array' });
+    const sheets = book.SheetNames[0];
+    const worksheet = book.Sheets[sheets];
+
+    if (modeSwitch.value) {
+      // 範圍資料讀取
+      readDataRange(worksheet);
+    } else {
+      // 單一欄位讀取
+      readSingle(worksheet);
+    }
+  }
 }
 
 // #endregion
@@ -155,7 +189,7 @@ function handleGenerateData () {
 </script>
 
 <template>
-  <div class="flex flex-justify-evenly flex-items-center">
+  <div class="flex flex-justify-evenly flex-items-center py-6">
 
     <!-- 來源 Excel 檔案 -->
     <div>
@@ -180,10 +214,41 @@ function handleGenerateData () {
     </div>
 
     <!-- TODO: 資料讀取模式 -->
+    <div class="flex flex-col flex-self-stretch">
+      <el-switch
+        v-model="modeSwitch"
+        inline-prompt
+        style="--el-switch-on-color: #13ce66; --el-switch-off-color: #ff4949"
+        active-text="範圍資料"
+        inactive-text="單一欄位"
+      />
+      <div v-if="modeSwitch">
+        範圍資料
+      </div>
+      <div v-else>
+        <h4>單一欄位</h4>
+        <div class="mb-2">
+          <el-button type="primary" :icon="Plus" @click="handleColAdd"/>
+          <el-button type="primary" :icon="Minus" @click="handleColSub"/>
+        </div>
+        <div class="flex flex-items-center mb-2" v-for="(item, index) in singleFields">
+          <el-input
+            v-model="item.xlsxCol"
+            placeholder="ex:A1"
+            maxlength="2"
+            minlength="2"
+            class="mr-4"
+            style="width: 60px"
+            clearable
+          />
+          <div>{{ item.value }}</div>
+        </div>
+      </div>
+    </div>
 
     <!-- 讀取資料按鈕 -->
-    <div>
-      <el-button type="primary" @click="handleReadSourceData">get data</el-button>
+    <div class="flex flex-col flex-self-stretch">
+      <el-button type="primary" @click="handleReadSourceData">讀取資料</el-button>
     </div>
 
     <!-- Excel 模版資料 -->
