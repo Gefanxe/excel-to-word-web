@@ -10,6 +10,9 @@ import {
 } from 'unocss';
 
 export default defineConfig({
+  rules: [
+    ["m-0-auto", { margin: "0 auto" }]
+  ],
   shortcuts: [
     // ...
   ],
