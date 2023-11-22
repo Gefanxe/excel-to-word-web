@@ -55,6 +55,17 @@ const singleFields = reactive([
   }
 ]);
 
+// test
+/** @type { import('vue').Ref<import('element-plus').RowInstance> } */
+const rangeDataList = ref(null);
+function test() {
+  /** @type { HTMLDivElement } */
+  const elem = rangeDataList.value.$el;
+
+  console.log('test: ', elem.innerHTML);
+}
+
+
 function handleColAdd() {
   singleFields.push({
     id: Date.now(),
@@ -85,7 +96,7 @@ function readSingle(worksheet) {
 const rangeFields = ref();
 
 rangeFields.value = {
-  header: '',  // 設定A:代表沒有標題, 使用A,B,C....
+  header: 'A',  // 設定A:代表沒有標題, 使用A,B,C....
   range: 0,    // 跳過幾行才開始解析, 或限定範圍, 例: 'A5:E6'
   defval: ''   // 使用指定的值替代null或者undefined
 };
@@ -95,10 +106,17 @@ const rangeStartFlag = ref('');
 const rangeEndFlag = ref('');
 
 function readDataRange(worksheet) {
-
+  const elem = rangeDataList.value.$el;
   // 整個工作表輸出 json
   const xlsxData = xlsx.utils.sheet_to_json(worksheet, rangeFields.value);
-  console.log(xlsxData);
+  const xlsxDataShow = xlsx.utils.sheet_to_html(worksheet, {
+    id: 'sourceTable',
+    editable: true
+  });
+  console.log('worksheet: ', worksheet);
+  console.log('xlsxData: ', xlsxData);
+  console.log('rangeFields.value: ', rangeFields.value);
+  elem.innerHTML = xlsxDataShow;
 }
 
 // 讀取來源
@@ -188,20 +206,29 @@ function handleWordChanged (file, files) {
 
 // #region 生成按鈕
 function handleGenerateWord () {
-  docxTemps.value.forEach((docx) => {
 
-    docx.render({
-      xxxx: '',
-      yyy: ''
+  if (modeSwitch.value) {
+    // 範圍
+
+  } else {
+    // 單一欄位
+    const renderData = {};
+    singleFields.forEach((item) => {
+      renderData[item.tempStr] = item.value;
     });
-
-    const buf = docx.getZip().generate({
-      type: 'blob'
-    })
-
-    // TODO: 名字要怎麼取??
-    saveAs(buf, 'newDoc.docx');
-  });
+    
+    docxTemps.value.forEach((docx) => {
+  
+      docx.render(renderData);
+  
+      const buf = docx.getZip().generate({
+        type: 'blob'
+      })
+  
+      // TODO: 名字要怎麼取??
+      saveAs(buf, `${renderData[0].value}newDoc.docx`);
+    });
+  }
 }
 // #endregion
 
@@ -243,11 +270,8 @@ function handleGenerateWord () {
         active-text="範圍資料"
         inactive-text="單一欄位"
       />
-      <div v-if="modeSwitch" class="w50">
+      <div v-if="modeSwitch">
         <h4 class="text-center">範圍資料</h4>
-        <el-row class="flex-col flex-items-center">
-          <el-checkbox v-model="rangeFields.header" label="有標題行" size="large" true-label="A" false-label="" />
-        </el-row>
         <el-row class="flex-col flex-items-center">
           <el-col>
             <el-checkbox v-model="isRangeFlag" label="跳過 or 限定範圍" size="large" />
@@ -264,7 +288,7 @@ function handleGenerateWord () {
               maxlength="2"
               minlength="2"
               placeholder="A1"
-            /> / 
+            />～
             <el-input
               v-model="rangeEndFlag"
               class="range-input mx-2"
@@ -275,8 +299,11 @@ function handleGenerateWord () {
             />
           </el-row>
         </el-row>
+        <el-row ref="rangeDataList">
+          Hello
+        </el-row>
       </div>
-      <div v-else class="w50">
+      <div v-else>
         <h4 class="text-center">單一欄位</h4>
         <el-row class="mb-2 flex-justify-center">
           <el-button type="primary" :icon="Plus" @click="handleColAdd"/>
@@ -291,14 +318,12 @@ function handleGenerateWord () {
             minlength="2"
             class="mr-2"
             style="width: 60px"
-            clearable
           />
           <el-input
             v-model="item.tempStr"
             placeholder="tempStr"
             class="mr-4"
             style="width: 80px"
-            clearable
           />
           <div>{{ item.value }}</div>
         </div>
@@ -308,6 +333,9 @@ function handleGenerateWord () {
     <!-- 讀取資料按鈕 -->
     <div class="flex flex-col flex-self-stretch">
       <el-button type="primary" @click="handleReadSourceData">讀取資料</el-button>
+      <hr>
+
+
     </div>
 
     <!-- Excel 模版資料 -->
@@ -337,6 +365,8 @@ function handleGenerateWord () {
     <!-- 生成資料按鈕 -->
     <div>
       <el-button type="primary" @click="handleGenerateWord">生成資料</el-button>
+      <hr>
+      <button @click="test">TEST</button>
     </div>
 
   </div>
