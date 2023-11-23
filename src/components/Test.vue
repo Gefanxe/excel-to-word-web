@@ -9,7 +9,15 @@ const formInline = reactive({
 })
 
 function handleInput(val) {
-  formInline.ipt2 = val.toUpperCase().replace(/^([A-Z]{1}\d{,6})/g, '');
+  const upperVal = val.toUpperCase();
+  console.log('1', upperVal);
+  if (upperVal.length < 2 && !/^[A-Z]/.test(upperVal)) {
+    formInline.ipt2 = '';
+  }
+  if (upperVal.length > 1 && !/^[A-Z]\d{1,5}/.test(upperVal)) {
+    console.log('2', upperVal);
+    formInline.ipt2 = upperVal.slice(0, -1);
+  }
 }
 
 const onSubmit = () => {
