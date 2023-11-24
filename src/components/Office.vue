@@ -1,12 +1,23 @@
 <script setup>
 import { ref, reactive } from 'vue';
 import { genFileId, switchProps, uploadBaseProps } from 'element-plus';
+import { vMaska } from 'maska';
 import xlsx, { read } from 'xlsx';
 import PizZip from "pizzip";
 import Docxtemplater from "docxtemplater";
 import saveAs from 'save-as';
 import { Plus, Minus, Delete } from '@element-plus/icons-vue';
 
+/** @type { import('maska').MaskInputOptions } */
+const maskOpts = {
+  mask: 'A#####',
+  tokens: {
+    A: {
+      pattern: /[A-Z]/,
+      transform: str => str.toUpperCase()
+    }
+  }
+}; // preProcess 可以做到的事, 也可以在tokens.transform裡做
 
 // #region 資料來源
 const uploadSource = ref(null);
@@ -40,10 +51,17 @@ const handleSourceChanged = (file) => {
 // #endregion
 
 
-// #region 讀取資料按鈕
+// #region 讀取資料區
 
 const modeSwitch = ref(true); // false: 單一, true: 範圍
 
+// test
+
+  
+function test() {
+
+  console.log('test: ', rangeFields);
+}
 
 // 單一
 const singleFields = reactive([
@@ -55,16 +73,19 @@ const singleFields = reactive([
   }
 ]);
 
-// test
-/** @type { import('vue').Ref<import('element-plus').RowInstance> } */
-const rangeDataList = ref(null);
-function test() {
-  /** @type { HTMLDivElement } */
-  const elem = rangeDataList.value.$el;
 
-  console.log('test: ', elem.innerHTML);
+const singleFieldRefs = ref([]);
+
+/**
+ * 
+ * @param { HTMLInputElement } el 
+ */
+function singleInputAddRefs(el) {
+  if (el) {
+    el.focus();
+    return singleFieldRefs.value.push(el);
+  }
 }
-
 
 function handleColAdd() {
   singleFields.push({
@@ -92,31 +113,45 @@ function readSingle(worksheet) {
 
 // 範圍
 
-/** @type { import('vue').Ref<import('xlsx').Sheet2JSONOpts> } */
-const rangeFields = ref();
+const rangeFields = reactive([]);
 
-rangeFields.value = {
+/** @type { import('vue').Ref<import('xlsx').Sheet2JSONOpts> } */
+const rangeFieldSetting = ref();
+
+rangeFieldSetting.value = {
   header: 'A',  // 設定A:代表沒有標題, 使用A,B,C....
   range: 0,    // 跳過幾行才開始解析, 或限定範圍, 例: 'A5:E6'
   defval: ''   // 使用指定的值替代null或者undefined
 };
 
+// 跳過 or 限定範圍
 const isRangeFlag = ref(true);
+
+// 限定範圍(起/迄)
 const rangeStartFlag = ref('');
 const rangeEndFlag = ref('');
 
+/** @type { import('vue').Ref<import('element-plus').RowInstance> } */
+const rangeDataList = ref(null);
+
 function readDataRange(worksheet) {
+  /** @type { HTMLDivElement } */
   const elem = rangeDataList.value.$el;
   // 整個工作表輸出 json
-  const xlsxData = xlsx.utils.sheet_to_json(worksheet, rangeFields.value);
-  const xlsxDataShow = xlsx.utils.sheet_to_html(worksheet, {
-    id: 'sourceTable',
-    editable: true
+  const xlsxData = xlsx.utils.sheet_to_json(worksheet, rangeFieldSetting.value);
+  const jsonSheet = xlsx.utils.json_to_sheet(xlsxData);
+  const xlsxDataShow = xlsx.utils.sheet_to_html(jsonSheet, {
+    id: 'sourceTable'
   });
-  console.log('worksheet: ', worksheet);
-  console.log('xlsxData: ', xlsxData);
-  console.log('rangeFields.value: ', rangeFields.value);
   elem.innerHTML = xlsxDataShow;
+
+  Object.keys(xlsxData[0]).forEach(item => {
+    rangeFields.push({
+      id: Date.now(),
+      rangeColumn: item,
+      tempStr: ''
+    });
+  });
 }
 
 // 讀取來源
@@ -272,35 +307,38 @@ function handleGenerateWord () {
       />
       <div v-if="modeSwitch">
         <h4 class="text-center">範圍資料</h4>
-        <el-row class="flex-col flex-items-center">
+        <el-row class="flex-col flex-items-center mb-4">
           <el-col>
             <el-checkbox v-model="isRangeFlag" label="跳過 or 限定範圍" size="large" />
           </el-col>
           <el-col v-if="isRangeFlag">
-            跳過 <el-input-number class="mx-2" v-model="rangeFields.range" :min="0" size="small"></el-input-number> 行
+            跳過 <el-input-number class="mx-2" v-model="rangeFieldSetting.range" :min="0" size="small"></el-input-number> 行
           </el-col>
           <el-row v-else class="justify-center flex-nowrap">
             <span>限定範圍</span>
             <el-input
               v-model="rangeStartFlag"
+              v-maska:[maskOpts]
               class="range-input mx-2"
               size="small"
-              maxlength="2"
-              minlength="2"
               placeholder="A1"
             />～
             <el-input
               v-model="rangeEndFlag"
+              v-maska:[maskOpts]
               class="range-input mx-2"
               size="small"
-              maxlength="2"
-              minlength="2"
               placeholder="E5"
             />
           </el-row>
         </el-row>
-        <el-row ref="rangeDataList">
-          Hello
+        <el-row class="mb-2" ref="rangeDataList"></el-row>
+        <el-row class="rangeColumnSetting flex-col">
+          <div class="mb-2" v-for="item in rangeFields" :key="item.id">
+            <el-input v-model="item.tempStr">
+              <template #prepend>{{ item.rangeColumn }}</template>
+            </el-input>
+          </div>
         </el-row>
       </div>
       <div v-else>
@@ -312,10 +350,10 @@ function handleGenerateWord () {
         <div class="flex flex-items-center mb-2" v-for="(item, index) in singleFields" :key="item.id">
           <el-button type="danger" class="mr-2" :icon="Delete" circle @click="handleDelOne(index)" />
           <el-input
+            :ref="singleInputAddRefs"
             v-model="item.xlsxCol"
+            v-maska:[maskOpts]
             placeholder="ex:A1"
-            maxlength="2"
-            minlength="2"
             class="mr-2"
             style="width: 60px"
           />
@@ -379,5 +417,14 @@ function handleGenerateWord () {
 }
 :deep(.el-input__inner) {
   text-align: center;
+}
+.rangeColumnSetting .el-input {
+  width: 220px;
+}
+</style>
+
+<style>
+#sourceTable, th, td {
+  border: 1px solid;
 }
 </style>

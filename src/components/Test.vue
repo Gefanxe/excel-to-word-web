@@ -28,8 +28,12 @@ const onSubmit = () => {
 /** @type { import('maska').MaskInputOptions } */
 const maskOpts = {
   mask: 'A#####',
-  tokens: 'A:[A-Z]',
-  preProcess: v => v.toUpperCase()
+  tokens: {
+    A: {
+      pattern: /[A-Z]/,
+      transform: str => str.toUpperCase()
+    }
+  }
 };
 
 </script>
