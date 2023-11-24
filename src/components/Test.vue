@@ -1,5 +1,6 @@
 <script setup>
-import { reactive } from 'vue'
+import { reactive } from 'vue';
+import { vMaska } from 'maska';
 
 const formInline = reactive({
   ipt1: '',
@@ -21,26 +22,24 @@ function handleInput(val) {
 }
 
 const onSubmit = () => {
-  console.log('test: ', formInline.ipt2)
+  console.log('test: ', formInline.ipt1)
 }
+
+/** @type { import('maska').MaskInputOptions } */
+const maskOpts = {
+  mask: 'A#####',
+  tokens: 'A:[A-Z]',
+  preProcess: v => v.toUpperCase()
+};
+
 </script>
 
 <template>
   <el-form :inline="true" :model="formInline" class="demo-form-inline">
-    <el-form-item label="這裡輸入的英文會變成大寫">
-      <el-input
-        v-model="formInline.ipt1"
-        placeholder=""
-        :formatter="(val) => val.toUpperCase()"
-        clearable 
-      />
-    </el-form-item>
     <el-form-item label="控制只能輸入A-Z開頭加數字">
       <el-input
-        v-model="formInline.ipt2"
-        placeholder=""
-        :formatter="(val) => val.toUpperCase()"
-        @input="handleInput"
+        v-model="formInline.ipt1"
+        v-maska:[maskOpts]
         clearable 
       />
     </el-form-item>
