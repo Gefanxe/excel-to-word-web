@@ -145,6 +145,7 @@ function readDataRange(worksheet) {
   });
   elem.innerHTML = xlsxDataShow;
 
+  rangeFields.length = 0;
   Object.keys(xlsxData[0]).forEach(item => {
     rangeFields.push({
       id: Date.now(),
