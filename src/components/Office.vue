@@ -297,7 +297,7 @@ function handleGenerateWord () {
       </div>
     </div>
 
-    <!-- TODO: 資料讀取模式 -->
+    <!-- 資料讀取模式 -->
     <div class="flex flex-col flex-items-center flex-self-stretch">
       <el-switch
         v-model="modeSwitch"
