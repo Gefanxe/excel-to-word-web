@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive } from 'vue';
+import { ref, reactive, watch } from 'vue';
 import { genFileId, switchProps, uploadBaseProps } from 'element-plus';
 import { vMaska } from 'maska';
 import xlsx, { read } from 'xlsx';
@@ -80,12 +80,19 @@ const singleFieldRefs = ref([]);
  * 
  * @param { HTMLInputElement } el 
  */
-function singleInputAddRefs(el) {
-  if (el) {
-    el.focus();
-    return singleFieldRefs.value.push(el);
-  }
-}
+// function singleInputAddRefs(el) {
+//   if (el) {
+//     console.log('tttt');
+//     el.focus();
+//     return singleFieldRefs.value.push(el);
+//   }
+// }
+
+watch(singleFieldRefs.value, (n, o) => {
+  /** @type { HTMLInputElement } */
+  const elem = n.slice(-1)[0].input;
+  elem.focus();
+});
 
 function handleColAdd() {
   singleFields.push({
@@ -351,7 +358,7 @@ function handleGenerateWord () {
         <div class="flex flex-items-center mb-2" v-for="(item, index) in singleFields" :key="item.id">
           <el-button type="danger" class="mr-2" :icon="Delete" circle @click="handleDelOne(index)" />
           <el-input
-            :ref="singleInputAddRefs"
+            ref="singleFieldRefs"
             v-model="item.xlsxCol"
             v-maska:[maskOpts]
             placeholder="ex:A1"

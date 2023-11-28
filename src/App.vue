@@ -5,8 +5,8 @@ import Test from './components/Test.vue';
 </script>
 
 <template>
-  <!-- <Office /> -->
-  <Test />
+  <Office />
+  <!-- <Test /> -->
 </template>
 
 <style scoped>
