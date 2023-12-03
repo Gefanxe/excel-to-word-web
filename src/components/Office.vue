@@ -7,6 +7,9 @@ import PizZip from "pizzip";
 import Docxtemplater from "docxtemplater";
 import saveAs from 'save-as';
 import { Plus, Minus, Delete } from '@element-plus/icons-vue';
+import { liveQuery } from 'dexie';
+import { useObservable } from '@vueuse/rxjs';
+import { db } from '../utils/db';
 
 /** @type { import('maska').MaskInputOptions } */
 const maskOpts = {
@@ -37,7 +40,6 @@ const handleSourceExceed = (files) => {
 }
 
 const handleSourceChanged = (file) => {
-  console.log('on Changed!', file);
   // 剖析副檔名(file.raw.type分不出來excel與word)
   const fileExtension = file.name.replace(/.+\.(.+)/, '$1');
   if (!/xlsx/i.test(fileExtension)) {
@@ -56,11 +58,9 @@ const handleSourceChanged = (file) => {
 const modeSwitch = ref(true); // false: 單一, true: 範圍
 
 // test
-
-  
 function test() {
-
   console.log('test: ', rangeFields);
+  console.log('test: ', xlsxData);
 }
 
 // 單一
@@ -75,18 +75,6 @@ const singleFields = reactive([
 
 
 const singleFieldRefs = ref([]);
-
-/**
- * 
- * @param { HTMLInputElement } el 
- */
-// function singleInputAddRefs(el) {
-//   if (el) {
-//     console.log('tttt');
-//     el.focus();
-//     return singleFieldRefs.value.push(el);
-//   }
-// }
 
 watch(singleFieldRefs.value, (n, o) => {
   /** @type { HTMLInputElement } */
@@ -121,6 +109,7 @@ function readSingle(worksheet) {
 // 範圍
 
 const rangeFields = reactive([]);
+let xlsxData = [];
 
 /** @type { import('vue').Ref<import('xlsx').Sheet2JSONOpts> } */
 const rangeFieldSetting = ref();
@@ -145,7 +134,7 @@ function readDataRange(worksheet) {
   /** @type { HTMLDivElement } */
   const elem = rangeDataList.value.$el;
   // 整個工作表輸出 json
-  const xlsxData = xlsx.utils.sheet_to_json(worksheet, rangeFieldSetting.value);
+  xlsxData = xlsx.utils.sheet_to_json(worksheet, rangeFieldSetting.value);
   const jsonSheet = xlsx.utils.json_to_sheet(xlsxData);
   const xlsxDataShow = xlsx.utils.sheet_to_html(jsonSheet, {
     id: 'sourceTable'
@@ -188,38 +177,43 @@ function handleReadSourceData() {
 
 // #endregion
 
+// TODO: Excel模版
+// #region Excel模版
+
+// #endregion
 
 // #region Word模版
 
 /** @type { import('vue').Ref<import('element-plus').UploadInstance> } */
 const uploadWord = ref(null);
 
-/** @type { import('vue').Ref<import('element-plus').UploadRawFile[]> } */
-const sourceWords = ref([]);
+/** @type { import('element-plus').UploadRawFile[] } */
+const sourceWords = [];
 
-/** @type { import('vue').Ref<Docxtemplater<PizZip>[]> } */
-const docxTemps = ref([]);
-
-
+/** @type { Docxtemplater<PizZip>[] } */
+const docxTemps = [];
 
 /**
  * 將檔案讀取至 buffer
  * @param { import('element-plus').UploadRawFile } f 
  */
 function readWordToBuffer(f) {
-  const reader = new FileReader();
-  reader.readAsArrayBuffer(f);
-  reader.onload = function (e) {
-    const data = new Uint8Array(reader.result);
-
-    const zip = new PizZip(data);
-    const doc = new Docxtemplater(zip, {
-      paragraphLoop: true,
-      linebreaks: true,
-    });
-    
-    docxTemps.value.push(doc);
-  };
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsArrayBuffer(f);
+    reader.onload = function (e) {
+      
+      const data = new Uint8Array(reader.result);
+      const zip = new PizZip(data);
+      const doc = new Docxtemplater(zip, {
+        paragraphLoop: true,
+        linebreaks: true,
+      });
+      doc.fileName = f.name;
+      docxTemps.push(doc);
+      resolve({result: 'ok'});
+    };
+  });
 }
 
 /**
@@ -227,20 +221,21 @@ function readWordToBuffer(f) {
  * @param { import('element-plus').UploadFile } file 
  * @param { import('element-plus').UploadFiles } files 
  */
-function handleWordChanged (file, files) {
+async function handleWordChanged(file, files) {
   files.forEach((f) => {
     const fileExt = f.name.replace(/.+\.(.+)/, '$1');
     if (!/docx/i.test(fileExt)) {
       uploadWord.value.handleRemove(f);
       console.log('請上傳 Word 檔, 副檔名必須為 docx! ', f.name);
     } else {
-      sourceWords.value.push(f.raw);
+      sourceWords.push(f.raw);
     }
   });
 
-  sourceWords.value.forEach((wordTemp) => {
-    readWordToBuffer(wordTemp);
-  });
+  for (let i = 0; i < sourceWords.length; i++) {
+    const wordTemp = sourceWords[i];
+    await readWordToBuffer(wordTemp);
+  }
 
 };
 
@@ -248,10 +243,15 @@ function handleWordChanged (file, files) {
 
 
 // #region 生成按鈕
-function handleGenerateWord () {
-
+function handleGenerateWord() {
+  
   if (modeSwitch.value) {
-    // 範圍
+    // TODO: 範圍
+    if (xlsxData.length > 0) {
+
+    } else {
+      alert('沒有讀取範圍資料!');
+    }
 
   } else {
     // 單一欄位
@@ -259,23 +259,67 @@ function handleGenerateWord () {
     singleFields.forEach((item) => {
       renderData[item.tempStr] = item.value;
     });
-    
-    docxTemps.value.forEach((docx) => {
-  
+
+    docxTemps.forEach((docx, idx) => {
       docx.render(renderData);
-  
-      const buf = docx.getZip().generate({
-        type: 'blob'
-      })
-  
+      const buf = docx.getZip().generate({ type: 'blob' });
+
       // TODO: 名字要怎麼取??
-      saveAs(buf, `${renderData[0].value}newDoc.docx`);
+      saveAs(buf, `Print_${idx+1}_${docx.fileName}`);
     });
   }
 }
 // #endregion
 
 // TODO: 一鍵清除 uploadWord / sourceWords
+
+// #region 檔案作業
+
+// 檔案清單
+const dataList = useObservable(
+  liveQuery(() => db.mailMergeTool.toArray())
+);
+
+
+const fileName = ref(null); // 存檔名
+const errMsg = ref(null);   // 錯誤訊息顯示
+const currentLoadFile = ref('');
+
+const showErr = (msg) => {
+  errMsg.value.innerHTML = msg;
+  const id = setTimeout(() => {
+    errMsg.value.innerHTML = '';
+    clearTimeout(id);
+  }, 3000);
+
+};
+
+const saveData = async () => {
+  const _fName = fileName.value;
+  if (_fName === '') return alert('no name!');
+  try {
+    const id = await db.mailMergeTool.add({
+      name: _fName
+    });
+  } catch (error) {
+    showErr(error);
+  }
+};
+
+const delData = async (id) => {
+  // const d = await db.mailMergeTool.toArray();
+  // console.log('test: ', d);
+  const dCount = await db.mailMergeTool.where('id').anyOf(id).delete();
+
+  showErr(`刪除了 ${dCount}筆`);
+};
+
+const loadData = (item) => {
+  // console.log('test: ', item.name);
+  currentLoadFile.value = item.name;
+};
+
+// #endregion
 
 </script>
 
@@ -306,13 +350,8 @@ function handleGenerateWord () {
 
     <!-- 資料讀取模式 -->
     <div class="flex flex-col flex-items-center flex-self-stretch">
-      <el-switch
-        v-model="modeSwitch"
-        inline-prompt
-        style="--el-switch-on-color: #13ce66; --el-switch-off-color: #ff4949"
-        active-text="範圍資料"
-        inactive-text="單一欄位"
-      />
+      <el-switch v-model="modeSwitch" inline-prompt style="--el-switch-on-color: #13ce66; --el-switch-off-color: #ff4949"
+        active-text="範圍資料" inactive-text="單一欄位" />
       <div v-if="modeSwitch">
         <h4 class="text-center">範圍資料</h4>
         <el-row class="flex-col flex-items-center mb-4">
@@ -324,20 +363,9 @@ function handleGenerateWord () {
           </el-col>
           <el-row v-else class="justify-center flex-nowrap">
             <span>限定範圍</span>
-            <el-input
-              v-model="rangeStartFlag"
-              v-maska:[maskOpts]
-              class="range-input mx-2"
-              size="small"
-              placeholder="A1"
-            />～
-            <el-input
-              v-model="rangeEndFlag"
-              v-maska:[maskOpts]
-              class="range-input mx-2"
-              size="small"
-              placeholder="E5"
-            />
+            <el-input v-model="rangeStartFlag" v-maska:[maskOpts] class="range-input mx-2" size="small"
+              placeholder="A1" />～
+            <el-input v-model="rangeEndFlag" v-maska:[maskOpts] class="range-input mx-2" size="small" placeholder="E5" />
           </el-row>
         </el-row>
         <el-row class="mb-2" ref="rangeDataList"></el-row>
@@ -352,25 +380,14 @@ function handleGenerateWord () {
       <div v-else>
         <h4 class="text-center">單一欄位</h4>
         <el-row class="mb-2 flex-justify-center">
-          <el-button type="primary" :icon="Plus" @click="handleColAdd"/>
-          <el-button type="primary" :icon="Minus" @click="handleColSub"/>
+          <el-button type="primary" :icon="Plus" @click="handleColAdd" />
+          <el-button type="primary" :icon="Minus" @click="handleColSub" />
         </el-row>
         <div class="flex flex-items-center mb-2" v-for="(item, index) in singleFields" :key="item.id">
           <el-button type="danger" class="mr-2" :icon="Delete" circle @click="handleDelOne(index)" />
-          <el-input
-            ref="singleFieldRefs"
-            v-model="item.xlsxCol"
-            v-maska:[maskOpts]
-            placeholder="ex:A1"
-            class="mr-2"
-            style="width: 60px"
-          />
-          <el-input
-            v-model="item.tempStr"
-            placeholder="tempStr"
-            class="mr-4"
-            style="width: 80px"
-          />
+          <el-input ref="singleFieldRefs" v-model="item.xlsxCol" v-maska:[maskOpts] placeholder="ex:A1" class="mr-2"
+            style="width: 60px" />
+          <el-input v-model="item.tempStr" placeholder="tempStr" class="mr-4" style="width: 100px" />
           <div>{{ item.value }}</div>
         </div>
       </div>
@@ -416,6 +433,31 @@ function handleGenerateWord () {
     </div>
 
   </div>
+  <hr>
+  <div>
+    <!-- 作業操作區 -->
+    <div>
+      <el-input v-model="fileName" placeholder="存檔名" style="width: 300px" /> &nbsp;
+      <el-button type="primary" @click="saveData">存檔</el-button>
+    </div>
+    <div>已存檔列表:</div>
+    <el-table :data="dataList" height="250" style="width: 500px" empty-text="無資料">
+      <el-table-column prop="id" label="id" width="50" align="center"/>
+      <el-table-column prop="name" label="名稱" />
+      <el-table-column label="操作" width="100" align="center">
+        <template #default="scope">
+          <el-button link type="primary" size="small" @click="loadData(scope.row)">讀取</el-button>
+          <el-button link type="danger" size="small" @click="delData(scope.row.id)">刪除</el-button>
+        </template>
+      </el-table-column>
+    </el-table>
+    <div>目前讀入的檔: <el-text class="mx-1" type="success">{{ currentLoadFile }}</el-text></div>
+    <hr>
+    <div>
+      <div>操作結果:</div>
+      <div ref="errMsg" class="error"></div>
+    </div>
+  </div>
 </template>
 
 <style scoped>
@@ -423,16 +465,24 @@ function handleGenerateWord () {
   width: 20%;
   display: inline;
 }
+
 :deep(.el-input__inner) {
   text-align: center;
 }
+
 .rangeColumnSetting .el-input {
   width: 220px;
+}
+
+.error {
+  color: red;
 }
 </style>
 
 <style>
-#sourceTable, th, td {
+#sourceTable,
+th,
+td {
   border: 1px solid;
 }
 </style>

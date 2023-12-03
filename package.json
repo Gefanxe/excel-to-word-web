@@ -17,7 +17,8 @@
     "pizzip": "^3.1.4",
     "save-as": "^0.1.8",
     "vue": "^3.3.4",
-    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.0/xlsx-0.20.0.tgz"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.0/xlsx-0.20.0.tgz",
+    "xlsx-renderer": "^2.4.7"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^4.2.3",

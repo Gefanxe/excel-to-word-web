@@ -142,6 +142,7 @@ const delData = async (id) => {
     </el-form-item>
   </el-form>
   <hr>
+  <!-- 作業操作區 -->
   <div>
     <input type="text" ref="fileName" placeholder="存檔名"> <br>
     <button @click="saveData">存檔</button>
@@ -149,14 +150,14 @@ const delData = async (id) => {
   <div>已存檔列表:</div>
   <div>
     <div v-for="item in dataList" :key="item.id">
-      <input type="radio" :id="`${item.name}_${item.id}`" name="dataList" :value="item.name" />
-      <label :for="`${item.name}_${item.id}`">{{ item.name }}</label>
+      <a href="javascript:void(0);">讀檔</a>
       &nbsp;
-      <a href="javascript:void(0);" @click="delData(item.id)">del</a>
+      <span>{{ item.name }}</span>
+      &nbsp;
+      <a href="javascript:void(0);" @click="delData(item.id)">刪除</a>
     </div>
   </div>
   <div>
-    <button>讀檔</button> <br>
     <div>目前讀入的檔:</div>
     <div></div>
   </div>
