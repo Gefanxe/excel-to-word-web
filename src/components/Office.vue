@@ -1,5 +1,6 @@
 <script setup>
 import { ref, reactive, watch } from 'vue';
+import { ElMessage } from 'element-plus'
 import { genFileId, switchProps, uploadBaseProps } from 'element-plus';
 import { vMaska } from 'maska';
 import xlsx, { read } from 'xlsx';
@@ -59,8 +60,11 @@ const modeSwitch = ref(true); // false: 單一, true: 範圍
 
 // test
 function test() {
-  console.log('test: ', rangeFields);
-  console.log('test: ', xlsxData);
+  
+  console.log('test: ');
+  // console.log('test: ', $Event.target);
+  
+  // console.log('test: ', xlsxData);
 }
 
 // 單一
@@ -73,13 +77,15 @@ const singleFields = reactive([
   }
 ]);
 
-
 const singleFieldRefs = ref([]);
 
 watch(singleFieldRefs.value, (n, o) => {
   /** @type { HTMLInputElement } */
-  const elem = n.slice(-1)[0].input;
-  elem.focus();
+  let elem;
+  if (n.length > 0) {
+    elem = n.slice(-1)[0].input;
+    elem.focus();
+  }
 });
 
 function handleColAdd() {
@@ -155,8 +161,6 @@ function readDataRange(worksheet) {
 function handleReadSourceData() {
   if (!sourceExcel.value) return alert('沒有來源資料!');
 
-  // TODO: 檢查 tempStr 有沒有重複
-
   const reader = new FileReader();
   reader.readAsArrayBuffer(sourceExcel.value);
   reader.onload = function (e) {
@@ -191,27 +195,25 @@ const uploadWord = ref(null);
 const sourceWords = [];
 
 /** @type { Docxtemplater<PizZip>[] } */
-const docxTemps = [];
+// const docxTemps = [];
 
 /**
  * 將檔案讀取至 buffer
  * @param { import('element-plus').UploadRawFile } f 
+ * @returns { Promise<Docxtemplater<PizZip>> }
  */
-function readWordToBuffer(f) {
+function readWordToDocTmp(f) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsArrayBuffer(f);
     reader.onload = function (e) {
-      
       const data = new Uint8Array(reader.result);
       const zip = new PizZip(data);
       const doc = new Docxtemplater(zip, {
         paragraphLoop: true,
         linebreaks: true,
       });
-      doc.fileName = f.name;
-      docxTemps.push(doc);
-      resolve({result: 'ok'});
+      resolve(doc);
     };
   });
 }
@@ -222,51 +224,94 @@ function readWordToBuffer(f) {
  * @param { import('element-plus').UploadFiles } files 
  */
 async function handleWordChanged(file, files) {
+  let isUploadOk = true;
   files.forEach((f) => {
     const fileExt = f.name.replace(/.+\.(.+)/, '$1');
     if (!/docx/i.test(fileExt)) {
       uploadWord.value.handleRemove(f);
-      console.log('請上傳 Word 檔, 副檔名必須為 docx! ', f.name);
-    } else {
-      sourceWords.push(f.raw);
+      isUploadOk = false;
+      alert('請上傳 Word 檔, 副檔名必須為 docx! ', f.name);
     }
   });
 
-  for (let i = 0; i < sourceWords.length; i++) {
-    const wordTemp = sourceWords[i];
-    await readWordToBuffer(wordTemp);
+  if (isUploadOk) {
+    files.forEach((f) => {
+      sourceWords.push(f.raw);
+    });
   }
-
 };
 
 // #endregion
 
 
 // #region 生成按鈕
-function handleGenerateWord() {
+async function handleGenerateWord() {
   
   if (modeSwitch.value) {
     // TODO: 範圍
+    const renderDatas = [];
     if (xlsxData.length > 0) {
+      // 檢查有沒有要設定
+      xlsxData.forEach((data) => {
+        const renderData = {};
+        for (const key in data) {
+          if (Object.hasOwnProperty.call(data, key)) {
+            const fieldValue = data[key];
+            rangeFields.forEach((item) => {
+              if (key === item.rangeColumn && item.tempStr !== '') {
+                renderData[item.tempStr] = fieldValue;
+              }
+            });
+          }
+        }
+        renderDatas.push(renderData);
+      });
+    } else {
+      alert('沒有來源資料!');
+    }
+
+    if (renderDatas.length > 0) {
+
+      for (let idx = 0; idx < sourceWords.length; idx++) {
+        const sourceWord = sourceWords[idx];
+
+        for (let i = 0; i < renderDatas.length; i++) {
+          const renderData = renderDatas[i];
+          const docx = await readWordToDocTmp(sourceWord);
+          await docx.renderAsync(renderData);
+          const buf = docx.getZip().generate({ type: 'blob' });
+          // TODO: 名字要怎麼取??
+          saveAs(buf, `Print_${idx+1}_${i+1}_${sourceWord.name}`);
+        }
+      }
 
     } else {
-      alert('沒有讀取範圍資料!');
+      alert('沒有設定資料!');
     }
 
   } else {
     // 單一欄位
+    const haveSetFlag = false;
     const renderData = {};
     singleFields.forEach((item) => {
-      renderData[item.tempStr] = item.value;
+      if (item.xlsxCol !== '' && item.tempStr !== '') {
+        renderData[item.tempStr] = item.value;
+        haveSetFlag = true;
+      }
     });
 
-    docxTemps.forEach((docx, idx) => {
-      docx.render(renderData);
+    if (!haveSetFlag) return alert('沒有設定資料!');
+
+    for (let idx = 0; idx < sourceWords.length; idx++) {
+      const sourceWord = sourceWords[idx];
+
+      const docx = await readWordToDocTmp(sourceWord);
+      await docx.renderAsync(renderData);
       const buf = docx.getZip().generate({ type: 'blob' });
-
       // TODO: 名字要怎麼取??
-      saveAs(buf, `Print_${idx+1}_${docx.fileName}`);
-    });
+      saveAs(buf, `Print_${idx+1}_${sourceWord.name}`);
+    }
+
   }
 }
 // #endregion
@@ -275,34 +320,27 @@ function handleGenerateWord() {
 
 // #region 檔案作業
 
+// 目前作業檔案名稱
+const fileName = ref(''); // 存檔名
+
 // 檔案清單
 const dataList = useObservable(
   liveQuery(() => db.mailMergeTool.toArray())
 );
 
-
-const fileName = ref(null); // 存檔名
-const errMsg = ref(null);   // 錯誤訊息顯示
+// const errMsg = ref('');   // 錯誤訊息顯示
 const currentLoadFile = ref('');
 
-const showErr = (msg) => {
-  errMsg.value.innerHTML = msg;
-  const id = setTimeout(() => {
-    errMsg.value.innerHTML = '';
-    clearTimeout(id);
-  }, 3000);
-
-};
-
-const saveData = async () => {
+const saveData = async ($event) => {
   const _fName = fileName.value;
-  if (_fName === '') return alert('no name!');
   try {
     const id = await db.mailMergeTool.add({
       name: _fName
     });
+    fileName.value = '';
+    ElMessage.success({ message: '已儲存', duration: 1100 });
   } catch (error) {
-    showErr(error);
+    ElMessage.error(error);
   }
 };
 
@@ -310,13 +348,13 @@ const delData = async (id) => {
   // const d = await db.mailMergeTool.toArray();
   // console.log('test: ', d);
   const dCount = await db.mailMergeTool.where('id').anyOf(id).delete();
-
-  showErr(`刪除了 ${dCount}筆`);
+  ElMessage.error({ message: `刪除了 ${dCount}筆`, duration: 1100 });
 };
 
 const loadData = (item) => {
   // console.log('test: ', item.name);
   currentLoadFile.value = item.name;
+  ElMessage.success({ message: `已讀取: ${item.name}`, duration: 1100 });
 };
 
 // #endregion
@@ -324,6 +362,31 @@ const loadData = (item) => {
 </script>
 
 <template>
+  <div>
+    <!-- 作業操作區 -->
+    <div>目前讀入的檔: <el-text class="mx-1" size="large" tag="b" type="success">{{ currentLoadFile }}</el-text></div>
+    <hr>
+    <div>
+      <el-input v-model="fileName" placeholder="未儲存作業" style="width: 300px" /> &nbsp;
+      <el-button type="primary" v-blur @click="saveData" :disabled="fileName === ''">存檔</el-button>
+    </div>
+
+    <div>已存檔列表:</div>
+    <el-table :data="dataList" height="250" style="width: 400px" size="small" empty-text="無資料">
+      <el-table-column prop="id" label="id" width="34" align="center"/>
+      <el-table-column prop="name" label="名稱" />
+      <el-table-column label="操作" width="100" align="center">
+        <template #default="scope">
+          <el-button link type="primary" size="small" v-blur @click="loadData(scope.row)">讀取</el-button>
+          <el-button link type="danger" size="small" v-blur @click="delData(scope.row.id)">刪除</el-button>
+        </template>
+      </el-table-column>
+    </el-table>
+
+  </div>
+
+  <hr>
+
   <div class="flex flex-justify-evenly flex-items-center py-6">
 
     <!-- 來源 Excel 檔案 -->
@@ -380,11 +443,11 @@ const loadData = (item) => {
       <div v-else>
         <h4 class="text-center">單一欄位</h4>
         <el-row class="mb-2 flex-justify-center">
-          <el-button type="primary" :icon="Plus" @click="handleColAdd" />
-          <el-button type="primary" :icon="Minus" @click="handleColSub" />
+          <el-button type="primary" :icon="Plus" v-blur @click="handleColAdd" />
+          <el-button type="primary" :icon="Minus" v-blur @click="handleColSub" />
         </el-row>
         <div class="flex flex-items-center mb-2" v-for="(item, index) in singleFields" :key="item.id">
-          <el-button type="danger" class="mr-2" :icon="Delete" circle @click="handleDelOne(index)" />
+          <el-button type="danger" class="mr-2" :icon="Delete" circle v-blur @click="handleDelOne(index)" />
           <el-input ref="singleFieldRefs" v-model="item.xlsxCol" v-maska:[maskOpts] placeholder="ex:A1" class="mr-2"
             style="width: 60px" />
           <el-input v-model="item.tempStr" placeholder="tempStr" class="mr-4" style="width: 100px" />
@@ -395,7 +458,7 @@ const loadData = (item) => {
 
     <!-- 讀取資料按鈕 -->
     <div class="flex flex-col flex-self-stretch">
-      <el-button type="primary" @click="handleReadSourceData">讀取資料</el-button>
+      <el-button type="primary" v-blur @click="handleReadSourceData">讀取資料</el-button>
       <hr>
 
 
@@ -427,37 +490,13 @@ const loadData = (item) => {
 
     <!-- 生成資料按鈕 -->
     <div>
-      <el-button type="primary" @click="handleGenerateWord">生成資料</el-button>
+      <el-button type="primary" v-blur @click="handleGenerateWord">生成資料</el-button>
       <hr>
-      <button @click="test">TEST</button>
+      <el-button type="primary" v-blur @click="test">TEST</el-button>
     </div>
 
   </div>
-  <hr>
-  <div>
-    <!-- 作業操作區 -->
-    <div>
-      <el-input v-model="fileName" placeholder="存檔名" style="width: 300px" /> &nbsp;
-      <el-button type="primary" @click="saveData">存檔</el-button>
-    </div>
-    <div>已存檔列表:</div>
-    <el-table :data="dataList" height="250" style="width: 500px" empty-text="無資料">
-      <el-table-column prop="id" label="id" width="50" align="center"/>
-      <el-table-column prop="name" label="名稱" />
-      <el-table-column label="操作" width="100" align="center">
-        <template #default="scope">
-          <el-button link type="primary" size="small" @click="loadData(scope.row)">讀取</el-button>
-          <el-button link type="danger" size="small" @click="delData(scope.row.id)">刪除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
-    <div>目前讀入的檔: <el-text class="mx-1" type="success">{{ currentLoadFile }}</el-text></div>
-    <hr>
-    <div>
-      <div>操作結果:</div>
-      <div ref="errMsg" class="error"></div>
-    </div>
-  </div>
+
 </template>
 
 <style scoped>
@@ -474,9 +513,6 @@ const loadData = (item) => {
   width: 220px;
 }
 
-.error {
-  color: red;
-}
 </style>
 
 <style>
