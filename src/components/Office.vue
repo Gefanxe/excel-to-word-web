@@ -181,8 +181,33 @@ function handleReadSourceData() {
 
 // #endregion
 
-// TODO: Excel模版
 // #region Excel模版
+
+/** @type { import('vue').Ref<import('element-plus').UploadInstance> } */
+const uploadExcel = ref(null);
+/** @type { import('vue').UnwrapNestedRefs<import('element-plus').UploadRawFile[]> } */
+const sourceExcels = reactive([]);
+
+/**
+ * 上傳 Excel 發生變化時
+ * @param { import('element-plus').UploadFile } file 
+ */
+async function handleExcelChanged(file) {
+  let isUploadOk = true;
+
+  const fileExt = file.name.replace(/.+\.(.+)/, '$1');
+  if (!/docx/i.test(fileExt)) {
+    uploadExcel.value.handleRemove(file);
+    isUploadOk = false;
+    alert('請上傳 Word 檔, 副檔名必須為 docx! ', file.name);
+  }
+
+  if (isUploadOk) {
+    sourceExcels.push(file.raw);
+  }
+};
+
+
 
 // #endregion
 
@@ -191,8 +216,8 @@ function handleReadSourceData() {
 /** @type { import('vue').Ref<import('element-plus').UploadInstance> } */
 const uploadWord = ref(null);
 
-/** @type { import('element-plus').UploadRawFile[] } */
-const sourceWords = [];
+/** @type { import('vue').UnwrapNestedRefs<import('element-plus').UploadRawFile[]> } */
+const sourceWords = reactive([]);
 
 /**
  * 將檔案讀取至 buffer
@@ -218,23 +243,19 @@ function readWordToDocTmp(f) {
 /**
  * 上傳 Word 發生變化時
  * @param { import('element-plus').UploadFile } file 
- * @param { import('element-plus').UploadFiles } files 
  */
-async function handleWordChanged(file, files) {
+async function handleWordChanged(file) {
   let isUploadOk = true;
-  files.forEach((f) => {
-    const fileExt = f.name.replace(/.+\.(.+)/, '$1');
-    if (!/docx/i.test(fileExt)) {
-      uploadWord.value.handleRemove(f);
-      isUploadOk = false;
-      alert('請上傳 Word 檔, 副檔名必須為 docx! ', f.name);
-    }
-  });
+
+  const fileExt = file.name.replace(/.+\.(.+)/, '$1');
+  if (!/docx/i.test(fileExt)) {
+    uploadWord.value.handleRemove(file);
+    isUploadOk = false;
+    alert('請上傳 Word 檔, 副檔名必須為 docx! ', file.name);
+  }
 
   if (isUploadOk) {
-    files.forEach((f) => {
-      sourceWords.push(f.raw);
-    });
+    sourceWords.push(file.raw);
   }
 };
 
@@ -243,9 +264,9 @@ async function handleWordChanged(file, files) {
 
 // #region 生成按鈕
 async function handleGenerateWord() {
-  
+  // TODO: for Excel
   if (modeSwitch.value) {
-    // TODO: 範圍
+    // 範圍
     const renderDatas = [];
     if (xlsxData.length > 0) {
       // 檢查有沒有要設定
@@ -348,7 +369,7 @@ const saveData = async ($event) => {
     _dataSet.singleFields = toRaw(singleFields);
   }
 
-  _dataSet.sourceWords = sourceWords;
+  _dataSet.sourceWords = toRaw(sourceWords);
 
   try {
     const id = await db.mailMergeTool.add({
@@ -432,15 +453,25 @@ const loadData = async (item) => {
     </div>
     <div class="flex-1 flex flex-col">
       <div class="text-center text-xl">來源Excel檔案</div>
-      <div class="text-center my-4 color-blue">{{ sourceExcel?.name }}</div>
+      <div class="flex-1 text-center">
+        <div class=" color-green">
+          {{ sourceExcel?.name }}
+        </div>
+      </div>
       <div class="text-center text-xl">設定</div>
-      <div class="flex-1 text-center">,,,</div>
+      <div class="flex-1 text-center">
+        <div v-if="fileName !== ''">{{ (modeSwitch) ? '範圍資料' : '單一欄位' }}</div>
+      </div>
     </div>
     <div class="flex-1 flex flex-col">
       <div class="text-center text-xl">Excel模版檔案</div>
-      <div class="flex-1 text-center">...</div>
+      <div class="flex-1 text-center">
+        <div class="color-green" v-for="item in sourceExcels" :key="item.uid">{{ item.name }}</div>
+      </div>
       <div class="text-center text-xl">Word模版檔案</div>
-      <div class="flex-1 text-center">,,,</div>
+      <div class="flex-1 text-center">
+        <div class="color-blue" v-for="item in sourceWords" :key="item.uid">{{ item.name }}</div>
+      </div>
     </div>
   </div>
 
@@ -524,7 +555,25 @@ const loadData = async (item) => {
     </div>
 
     <!-- Excel 模版資料 -->
-
+    <div>
+      <h3>Excel 模版檔案</h3>
+      <div class="float-left">
+        <el-upload ref="uploadExcel" drag :auto-upload="false" :multiple="true" :on-change="handleExcelChanged">
+          <el-icon>
+            <Plus />
+          </el-icon>
+          <div class="el-upload__text">
+            將資料來源拖放到此<br>
+            或<em>點擊</em>上傳
+          </div>
+          <template #tip>
+            <div class="el-upload__tip">
+              僅接受副檔名為xlsx的Excel檔案
+            </div>
+          </template>
+        </el-upload>
+      </div>
+    </div>
 
     <!-- Word 模版資料 -->
     <div>
