@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, watch } from 'vue';
+import { ref, reactive, watch, toRaw } from 'vue';
 import { ElMessage } from 'element-plus'
 import { genFileId, switchProps, uploadBaseProps } from 'element-plus';
 import { vMaska } from 'maska';
@@ -24,7 +24,7 @@ const maskOpts = {
 }; // preProcess 可以做到的事, 也可以在tokens.transform裡做
 
 // #region 資料來源
-const uploadSource = ref(null);
+const uploadSource = ref(null); // <el-upload />
 const sourceExcel = ref(null);
 
 const handleSourceExceed = (files) => {
@@ -137,20 +137,18 @@ const rangeEndFlag = ref('');
 const rangeDataList = ref(null);
 
 function readDataRange(worksheet) {
-  /** @type { HTMLDivElement } */
-  const elem = rangeDataList.value.$el;
   // 整個工作表輸出 json
   xlsxData = xlsx.utils.sheet_to_json(worksheet, rangeFieldSetting.value);
   const jsonSheet = xlsx.utils.json_to_sheet(xlsxData);
   const xlsxDataShow = xlsx.utils.sheet_to_html(jsonSheet, {
     id: 'sourceTable'
   });
-  elem.innerHTML = xlsxDataShow;
+  rangeDataList.value.$el.innerHTML = xlsxDataShow;
 
   rangeFields.length = 0;
-  Object.keys(xlsxData[0]).forEach(item => {
+  Object.keys(xlsxData[0]).forEach((item, idx) => {
     rangeFields.push({
-      id: Date.now(),
+      id: Date.now() + idx,
       rangeColumn: item,
       tempStr: ''
     });
@@ -160,23 +158,25 @@ function readDataRange(worksheet) {
 // 讀取來源
 function handleReadSourceData() {
   if (!sourceExcel.value) return alert('沒有來源資料!');
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsArrayBuffer(sourceExcel.value);
+    reader.onload = function (e) {
+      const data = new Uint8Array(reader.result);
+      const book = xlsx.read(data, { type: 'array' });
+      const sheets = book.SheetNames[0];
+      const worksheet = book.Sheets[sheets];
 
-  const reader = new FileReader();
-  reader.readAsArrayBuffer(sourceExcel.value);
-  reader.onload = function (e) {
-    const data = new Uint8Array(reader.result);
-    const book = xlsx.read(data, { type: 'array' });
-    const sheets = book.SheetNames[0];
-    const worksheet = book.Sheets[sheets];
-
-    if (modeSwitch.value) {
-      // 範圍資料讀取
-      readDataRange(worksheet);
-    } else {
-      // 單一欄位讀取
-      readSingle(worksheet);
+      if (modeSwitch.value) {
+        // 範圍資料讀取
+        readDataRange(worksheet);
+      } else {
+        // 單一欄位讀取
+        readSingle(worksheet);
+      }
+      resolve('ok');
     }
-  }
+  });
 }
 
 // #endregion
@@ -193,9 +193,6 @@ const uploadWord = ref(null);
 
 /** @type { import('element-plus').UploadRawFile[] } */
 const sourceWords = [];
-
-/** @type { Docxtemplater<PizZip>[] } */
-// const docxTemps = [];
 
 /**
  * 將檔案讀取至 buffer
@@ -333,9 +330,30 @@ const currentLoadFile = ref('');
 
 const saveData = async ($event) => {
   const _fName = fileName.value;
+  const _dataSet = {};
+  
+  _dataSet.sourceExcel = toRaw(sourceExcel.value);
+  _dataSet.modeSwitch = toRaw(modeSwitch.value);
+
+  if (modeSwitch.value) {
+    _dataSet.isRangeFlag = toRaw(isRangeFlag.value);
+    if (isRangeFlag.value) {
+      _dataSet.rangeFieldSetting = toRaw(rangeFieldSetting.value);
+      _dataSet.rangeFields = toRaw(rangeFields);
+    } else {
+      _dataSet.rangeStartFlag = toRaw(rangeStartFlag.value);
+      _dataSet.rangeEndFlag = toRaw(rangeEndFlag.value);
+    }
+  } else {
+    _dataSet.singleFields = toRaw(singleFields);
+  }
+
+  _dataSet.sourceWords = sourceWords;
+
   try {
     const id = await db.mailMergeTool.add({
-      name: _fName
+      name: _fName,
+      dataSet: _dataSet
     });
     fileName.value = '';
     ElMessage.success({ message: '已儲存', duration: 1100 });
@@ -351,9 +369,36 @@ const delData = async (id) => {
   ElMessage.error({ message: `刪除了 ${dCount}筆`, duration: 1100 });
 };
 
-const loadData = (item) => {
-  // console.log('test: ', item.name);
+const loadData = async (item) => {
+  // TODO: must clear current ref date
   currentLoadFile.value = item.name;
+  
+  sourceExcel.value = item.dataSet.sourceExcel;
+  modeSwitch.value = item.dataSet.modeSwitch;
+  if (modeSwitch.value) {
+    isRangeFlag.value = item.dataSet.isRangeFlag;
+    if (isRangeFlag.value) {
+      rangeFieldSetting.value = item.dataSet.rangeFieldSetting;
+      await handleReadSourceData();
+      rangeFields.length = 0;
+      item.dataSet.rangeFields.forEach((field) => {
+        rangeFields.push(field);
+      });
+    } else {
+      rangeStartFlag.value = item.dataSet.rangeStartFlag;
+      rangeEndFlag.value = item.dataSet.rangeEndFlag;
+    }
+  } else {
+    singleFields.length = 0;
+    item.dataSet.singleFields.forEach((singleField) => {
+      singleFields.push(singleField);
+    });
+    await handleReadSourceData();
+  }
+  item.dataSet.sourceWords.forEach((wordTmpSource) => {
+    sourceWords.push(wordTmpSource);
+  });
+
   ElMessage.success({ message: `已讀取: ${item.name}`, duration: 1100 });
 };
 
@@ -362,27 +407,41 @@ const loadData = (item) => {
 </script>
 
 <template>
-  <div>
-    <!-- 作業操作區 -->
-    <div>目前讀入的檔: <el-text class="mx-1" size="large" tag="b" type="success">{{ currentLoadFile }}</el-text></div>
-    <hr>
-    <div>
-      <el-input v-model="fileName" placeholder="未儲存作業" style="width: 300px" /> &nbsp;
-      <el-button type="primary" v-blur @click="saveData" :disabled="fileName === ''">存檔</el-button>
+  <div class="flex">
+    <div class="flex-1">
+      <!-- 作業操作區 -->
+      <div>目前讀入的檔: <el-text class="mx-1" size="large" tag="b" type="success">{{ currentLoadFile }}</el-text></div>
+      <hr>
+      <div>
+        <el-input v-model="fileName" placeholder="未儲存作業" style="width: 300px" /> &nbsp;
+        <el-button type="primary" v-blur @click="saveData" :disabled="fileName === ''">存檔</el-button>
+      </div>
+  
+      <div>已存檔列表:</div>
+      <el-table :data="dataList" height="250" style="width: 400px" size="small" empty-text="無資料">
+        <el-table-column prop="id" label="id" width="34" align="center"/>
+        <el-table-column prop="name" label="名稱" />
+        <el-table-column label="操作" width="100" align="center">
+          <template #default="scope">
+            <el-button link type="primary" size="small" v-blur @click="loadData(scope.row)">讀取</el-button>
+            <el-button link type="danger" size="small" v-blur @click="delData(scope.row.id)">刪除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+  
     </div>
-
-    <div>已存檔列表:</div>
-    <el-table :data="dataList" height="250" style="width: 400px" size="small" empty-text="無資料">
-      <el-table-column prop="id" label="id" width="34" align="center"/>
-      <el-table-column prop="name" label="名稱" />
-      <el-table-column label="操作" width="100" align="center">
-        <template #default="scope">
-          <el-button link type="primary" size="small" v-blur @click="loadData(scope.row)">讀取</el-button>
-          <el-button link type="danger" size="small" v-blur @click="delData(scope.row.id)">刪除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
-
+    <div class="flex-1 flex flex-col">
+      <div class="text-center text-xl">來源Excel檔案</div>
+      <div class="text-center my-4 color-blue">{{ sourceExcel?.name }}</div>
+      <div class="text-center text-xl">設定</div>
+      <div class="flex-1 text-center">,,,</div>
+    </div>
+    <div class="flex-1 flex flex-col">
+      <div class="text-center text-xl">Excel模版檔案</div>
+      <div class="flex-1 text-center">...</div>
+      <div class="text-center text-xl">Word模版檔案</div>
+      <div class="flex-1 text-center">,,,</div>
+    </div>
   </div>
 
   <hr>
@@ -448,9 +507,9 @@ const loadData = (item) => {
         </el-row>
         <div class="flex flex-items-center mb-2" v-for="(item, index) in singleFields" :key="item.id">
           <el-button type="danger" class="mr-2" :icon="Delete" circle v-blur @click="handleDelOne(index)" />
-          <el-input ref="singleFieldRefs" v-model="item.xlsxCol" v-maska:[maskOpts] placeholder="ex:A1" class="mr-2"
+          <el-input ref="singleFieldRefs" spellcheck="false" v-model="item.xlsxCol" v-maska:[maskOpts] placeholder="ex:A1" class="mr-2"
             style="width: 60px" />
-          <el-input v-model="item.tempStr" placeholder="tempStr" class="mr-4" style="width: 100px" />
+          <el-input v-model="item.tempStr" spellcheck="false" placeholder="tempStr" class="mr-4" style="width: 100px" />
           <div>{{ item.value }}</div>
         </div>
       </div>
