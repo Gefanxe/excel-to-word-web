@@ -5,6 +5,7 @@ import { genFileId, switchProps, uploadBaseProps } from 'element-plus';
 import { vMaska } from 'maska';
 import xlsx, { read } from 'xlsx';
 import PizZip from "pizzip";
+import { Renderer } from 'xlsx-renderer'
 import Docxtemplater from "docxtemplater";
 import saveAs from 'save-as';
 import { Plus, Minus, Delete } from '@element-plus/icons-vue';
@@ -189,6 +190,22 @@ const uploadExcel = ref(null);
 const sourceExcels = reactive([]);
 
 /**
+ * 將Excel檔案讀取至 buffer
+ * @param { import('element-plus').UploadRawFile } f 
+ * @returns { Promise<Docxtemplater<PizZip>> }
+ */
+function readExcelToXlsTmp(f) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsArrayBuffer(f);
+    reader.onload = function (e) {
+      const data = new Uint8Array(reader.result);
+      resolve(data);
+    };
+  });
+}
+
+/**
  * 上傳 Excel 發生變化時
  * @param { import('element-plus').UploadFile } file 
  */
@@ -196,18 +213,16 @@ async function handleExcelChanged(file) {
   let isUploadOk = true;
 
   const fileExt = file.name.replace(/.+\.(.+)/, '$1');
-  if (!/docx/i.test(fileExt)) {
+  if (!/xlsx/i.test(fileExt)) {
     uploadExcel.value.handleRemove(file);
     isUploadOk = false;
-    alert('請上傳 Word 檔, 副檔名必須為 docx! ', file.name);
+    alert('請上傳 Excel 檔, 副檔名必須為 xlsx! ', file.name);
   }
 
   if (isUploadOk) {
     sourceExcels.push(file.raw);
   }
 };
-
-
 
 // #endregion
 
@@ -220,7 +235,7 @@ const uploadWord = ref(null);
 const sourceWords = reactive([]);
 
 /**
- * 將檔案讀取至 buffer
+ * 將Word檔案讀取至 buffer
  * @param { import('element-plus').UploadRawFile } f 
  * @returns { Promise<Docxtemplater<PizZip>> }
  */
@@ -262,35 +277,42 @@ async function handleWordChanged(file) {
 // #endregion
 
 
-// #region 生成按鈕
-async function handleGenerateWord() {
-  // TODO: for Excel
+// #region 生成
+
+// 生成excel
+async function generateExcel(renderDatas) {
   if (modeSwitch.value) {
-    // 範圍
-    const renderDatas = [];
-    if (xlsxData.length > 0) {
-      // 檢查有沒有要設定
-      xlsxData.forEach((data) => {
-        const renderData = {};
-        for (const key in data) {
-          if (Object.hasOwnProperty.call(data, key)) {
-            const fieldValue = data[key];
-            rangeFields.forEach((item) => {
-              if (key === item.rangeColumn && item.tempStr !== '') {
-                renderData[item.tempStr] = fieldValue;
-              }
-            });
-          }
+    for (let idx = 0; idx < sourceExcels.length; idx++) {
+        const sourceExcel = sourceExcels[idx];
+
+        for (let i = 0; i < renderDatas.length; i++) {
+          const renderData = renderDatas[i];
+          const buffer = await readExcelToXlsTmp(sourceExcel);
+          const report = await new Renderer().renderFromArrayBuffer(buffer, renderData);
+          const buf = await report.xlsx.writeBuffer();
+          // TODO: 名字要怎麼取??
+          saveAs(new Blob([buf]), `Print_${idx+1}_${i+1}_${sourceExcel.name}`);
         }
-        renderDatas.push(renderData);
-      });
-    } else {
-      alert('沒有來源資料!');
+      }
+  } else {
+    const renderData = renderDatas[0];
+    for (let idx = 0; idx < sourceExcels.length; idx++) {
+      const sourceExcel = sourceExcels[idx];
+
+      const buffer = await readExcelToXlsTmp(sourceExcel);
+      const report = await new Renderer().renderFromArrayBuffer(buffer, renderData);
+      const buf = await report.xlsx.writeBuffer();
+      // TODO: 名字要怎麼取??
+      saveAs(new Blob([buf]), `Print_${idx+1}_${i+1}_${sourceExcel.name}`);
     }
+  }
+}
 
-    if (renderDatas.length > 0) {
+// 生成word
+async function generateWord(renderDatas) {
 
-      for (let idx = 0; idx < sourceWords.length; idx++) {
+  if (modeSwitch.value) {
+    for (let idx = 0; idx < sourceWords.length; idx++) {
         const sourceWord = sourceWords[idx];
 
         for (let i = 0; i < renderDatas.length; i++) {
@@ -302,24 +324,8 @@ async function handleGenerateWord() {
           saveAs(buf, `Print_${idx+1}_${i+1}_${sourceWord.name}`);
         }
       }
-
-    } else {
-      alert('沒有設定資料!');
-    }
-
   } else {
-    // 單一欄位
-    const haveSetFlag = false;
-    const renderData = {};
-    singleFields.forEach((item) => {
-      if (item.xlsxCol !== '' && item.tempStr !== '') {
-        renderData[item.tempStr] = item.value;
-        haveSetFlag = true;
-      }
-    });
-
-    if (!haveSetFlag) return alert('沒有設定資料!');
-
+    const renderData = renderDatas[0];
     for (let idx = 0; idx < sourceWords.length; idx++) {
       const sourceWord = sourceWords[idx];
 
@@ -329,9 +335,89 @@ async function handleGenerateWord() {
       // TODO: 名字要怎麼取??
       saveAs(buf, `Print_${idx+1}_${sourceWord.name}`);
     }
-
   }
 }
+
+// 生成按鈕函數
+async function handleGenerate() {
+  
+  if (sourceExcels.length === 0 && sourceWords.length === 0) return alert('沒有載入任何模版');
+
+  const wordRenderDatas = [];
+  const excelRenderDatas = [];
+
+  if (modeSwitch.value) {
+    // 範圍
+    if (xlsxData.length === 0) return alert('沒有來源資料!');
+
+    // for excel
+    if (sourceExcels.length > 0) {
+      xlsxData.forEach((data) => {
+        const renderData = {
+          data: {}
+        };
+        for (const key in data) {
+          if (Object.hasOwnProperty.call(data, key)) {
+            const fieldValue = data[key];
+            rangeFields.forEach((item) => {
+              if (key === item.rangeColumn && item.tempStr !== '') {
+                renderData.data[item.tempStr] = fieldValue;
+              }
+            });
+          }
+        }
+        excelRenderDatas.push(renderData);
+      });
+      if (excelRenderDatas.length === 0) return alert('沒有設定資料!');
+    }
+
+    // for word
+    if (sourceWords.length > 0) {
+      xlsxData.forEach((data) => {
+        const renderData = {
+          data: {}
+        };
+        for (const key in data) {
+          if (Object.hasOwnProperty.call(data, key)) {
+            const fieldValue = data[key];
+            rangeFields.forEach((item) => {
+              if (key === item.rangeColumn && item.tempStr !== '') {
+                renderData.data[item.tempStr] = fieldValue;
+              }
+            });
+          }
+        }
+        wordRenderDatas.push(renderData);
+      });
+      if (wordRenderDatas.length === 0) return alert('沒有設定資料!');
+    }
+
+  } else {
+    // 單一欄位
+
+    // for excel
+    if (sourceExcels.length > 0) {}
+
+    // for word
+    if (sourceWords.length > 0) {
+      const haveSetFlag = false;
+      const renderData = {};
+      singleFields.forEach((item) => {
+        if (item.xlsxCol !== '' && item.tempStr !== '') {
+          renderData[item.tempStr] = item.value;
+          haveSetFlag = true;
+        }
+      });
+      if (!haveSetFlag) return alert('沒有設定資料!');
+      wordRenderDatas.push(renderData);
+    }
+  }
+
+  if (sourceExcels.length > 0) await generateExcel(excelRenderDatas);
+  if (sourceWords.length > 0) await generateWord(wordRenderDatas);
+
+}
+
 // #endregion
 
 // TODO: 一鍵清除 uploadWord / sourceWords
@@ -598,7 +684,7 @@ const loadData = async (item) => {
 
     <!-- 生成資料按鈕 -->
     <div>
-      <el-button type="primary" v-blur @click="handleGenerateWord">生成資料</el-button>
+      <el-button type="primary" v-blur @click="handleGenerate">生成資料</el-button>
       <hr>
       <el-button type="primary" v-blur @click="test">TEST</el-button>
     </div>
