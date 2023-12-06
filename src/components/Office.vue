@@ -25,6 +25,7 @@ const maskOpts = {
 }; // preProcess 可以做到的事, 也可以在tokens.transform裡做
 
 // #region 資料來源
+/** @type { import('vue').Ref<import('element-plus').UploadInstance> } */
 const uploadSource = ref(null); // <el-upload />
 const sourceExcel = ref(null);
 
@@ -53,7 +54,6 @@ const handleSourceChanged = (file) => {
 };
 
 // #endregion
-
 
 // #region 讀取資料區
 
@@ -276,7 +276,6 @@ async function handleWordChanged(file) {
 
 // #endregion
 
-
 // #region 生成
 
 // 生成excel
@@ -420,7 +419,39 @@ async function handleGenerate() {
 
 // #endregion
 
+// #region 清除
+
 // TODO: 一鍵清除 uploadWord / sourceWords
+
+function handleClear() {
+  // upload 元件
+  uploadSource.value.clearFiles();
+  uploadExcel.value.clearFiles();
+  uploadWord.value.clearFiles();
+
+  // 資料
+  sourceExcel.value = null;
+  sourceExcels.length = 0;
+  sourceWords.length = 0;
+
+  // 設定
+  currentLoadFile.value = '';
+
+  if (modeSwitch.value) {
+    rangeFields.length = 0;
+    xlsxData.length = 0;
+    rangeDataList.value.$el.innerHTML = '';
+  } else {
+    while (singleFields.length > 0) {
+      singleFields.pop();
+    }
+  }
+
+}
+
+
+// #endregion
+
 
 // #region 檔案作業
 
@@ -432,10 +463,9 @@ const dataList = useObservable(
   liveQuery(() => db.mailMergeTool.toArray())
 );
 
-// const errMsg = ref('');   // 錯誤訊息顯示
 const currentLoadFile = ref('');
 
-const saveData = async ($event) => {
+const saveData = async () => {
   const _fName = fileName.value;
   const _dataSet = {};
   
@@ -456,6 +486,7 @@ const saveData = async ($event) => {
   }
 
   _dataSet.sourceWords = toRaw(sourceWords);
+  _dataSet.sourceExcels = toRaw(sourceExcels);
 
   try {
     const id = await db.mailMergeTool.add({
@@ -504,6 +535,10 @@ const loadData = async (item) => {
   }
   item.dataSet.sourceWords.forEach((wordTmpSource) => {
     sourceWords.push(wordTmpSource);
+  });
+
+  item.dataSet.sourceExcels.forEach((excelTmpSource) => {
+    sourceExcels.push(excelTmpSource);
   });
 
   ElMessage.success({ message: `已讀取: ${item.name}`, duration: 1100 });
@@ -634,7 +669,7 @@ const loadData = async (item) => {
 
     <!-- 讀取資料按鈕 -->
     <div class="flex flex-col flex-self-stretch">
-      <el-button type="primary" v-blur @click="handleReadSourceData">讀取資料</el-button>
+      
       <hr>
 
 
@@ -684,7 +719,11 @@ const loadData = async (item) => {
 
     <!-- 生成資料按鈕 -->
     <div>
-      <el-button type="primary" v-blur @click="handleGenerate">生成資料</el-button>
+      <el-button type="primary" v-blur @click="handleReadSourceData">讀取資料</el-button>
+      <hr>
+      <el-button type="success" v-blur @click="handleGenerate">生成資料</el-button>
+      <hr>
+      <el-button type="danger" v-blur @click="handleClear">清除資料</el-button>
       <hr>
       <el-button type="primary" v-blur @click="test">TEST</el-button>
     </div>
