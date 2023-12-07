@@ -8,7 +8,7 @@ import PizZip from "pizzip";
 import { Renderer } from 'xlsx-renderer'
 import Docxtemplater from "docxtemplater";
 import saveAs from 'save-as';
-import { Plus, Minus, Delete } from '@element-plus/icons-vue';
+import { Plus, Minus, Delete, EditPen } from '@element-plus/icons-vue';
 import { liveQuery } from 'dexie';
 import { useObservable } from '@vueuse/rxjs';
 import { db } from '../utils/db';
@@ -102,8 +102,22 @@ function handleColSub() {
   singleFields.pop();
 }
 
-function handleDelOne(idx) {
-  singleFields.splice(idx, 1);
+// 單一: 設定輸出的部份檔名
+function handleSetPartOfName(item) {
+  if (item.xlsxCol === '' || item.tempStr === '' || item.value === '') {
+    alert('請填妥資料');
+  } else {
+    partOfFileName.value = item.value;
+  }
+}
+
+
+function handleSetPartOfNameForRange(item) {
+  if (item.tempStr === '') {
+    alert('請填妥資料');
+  } else {
+    partOfFileName.value = item.tempStr;
+  }
 }
 
 function readSingle(worksheet) {
@@ -278,6 +292,8 @@ async function handleWordChanged(file) {
 
 // #region 生成
 
+const partOfFileName = ref('');
+
 // 生成excel
 async function generateExcel(renderDatas) {
   if (modeSwitch.value) {
@@ -289,8 +305,9 @@ async function generateExcel(renderDatas) {
           const buffer = await readExcelToXlsTmp(sourceExcel);
           const report = await new Renderer().renderFromArrayBuffer(buffer, renderData);
           const buf = await report.xlsx.writeBuffer();
-          // TODO: 名字要怎麼取??
-          saveAs(new Blob([buf]), `Print_${idx+1}_${i+1}_${sourceExcel.name}`);
+          // TEST: 名字要怎麼取??
+          const partOfName = (partOfFileName.value !== '') ? partOfFileName.value : `${(idx + 1)}`
+          saveAs(new Blob([buf]), `RESULT_${partOfName}_${i+1}_${sourceExcel.name}`);
         }
       }
   } else {
@@ -302,7 +319,8 @@ async function generateExcel(renderDatas) {
       const report = await new Renderer().renderFromArrayBuffer(buffer, renderData);
       const buf = await report.xlsx.writeBuffer();
       // TODO: 名字要怎麼取??
-      saveAs(new Blob([buf]), `Print_${idx+1}_${i+1}_${sourceExcel.name}`);
+      const partOfName = (partOfFileName.value !== '') ? partOfFileName.value : `${(idx + 1)}`
+      saveAs(new Blob([buf]), `RESULT_${partOfName}_${i+1}_${sourceExcel.name}`);
     }
   }
 }
@@ -421,8 +439,6 @@ async function handleGenerate() {
 
 // #region 清除
 
-// TODO: 一鍵清除 uploadWord / sourceWords
-
 function handleClear() {
   // upload 元件
   uploadSource.value.clearFiles();
@@ -436,6 +452,7 @@ function handleClear() {
 
   // 設定
   currentLoadFile.value = '';
+  partOfFileName.value = '';
 
   if (modeSwitch.value) {
     rangeFields.length = 0;
@@ -465,12 +482,15 @@ const dataList = useObservable(
 
 const currentLoadFile = ref('');
 
+// 存檔
 const saveData = async () => {
   const _fName = fileName.value;
   const _dataSet = {};
   
   _dataSet.sourceExcel = toRaw(sourceExcel.value);
   _dataSet.modeSwitch = toRaw(modeSwitch.value);
+
+  _dataSet.partOfFileName = toRaw(partOfFileName.value);
 
   if (modeSwitch.value) {
     _dataSet.isRangeFlag = toRaw(isRangeFlag.value);
@@ -500,6 +520,7 @@ const saveData = async () => {
   }
 };
 
+// 刪檔
 const delData = async (id) => {
   // const d = await db.mailMergeTool.toArray();
   // console.log('test: ', d);
@@ -507,12 +528,16 @@ const delData = async (id) => {
   ElMessage.error({ message: `刪除了 ${dCount}筆`, duration: 1100 });
 };
 
+// 讀檔
 const loadData = async (item) => {
-  // TODO: must clear current ref date
+  // clear current setting
+  handleClear();
+
   currentLoadFile.value = item.name;
   
   sourceExcel.value = item.dataSet.sourceExcel;
   modeSwitch.value = item.dataSet.modeSwitch;
+  partOfFileName.value = item.dataSet.partOfFileName;
   if (modeSwitch.value) {
     isRangeFlag.value = item.dataSet.isRangeFlag;
     if (isRangeFlag.value) {
@@ -582,6 +607,7 @@ const loadData = async (item) => {
       <div class="text-center text-xl">設定</div>
       <div class="flex-1 text-center">
         <div v-if="fileName !== ''">{{ (modeSwitch) ? '範圍資料' : '單一欄位' }}</div>
+        <div>輸入的部份檔名: <span>{{ partOfFileName }}</span></div>
       </div>
     </div>
     <div class="flex-1 flex flex-col">
@@ -598,7 +624,7 @@ const loadData = async (item) => {
 
   <hr>
 
-  <div class="flex flex-justify-evenly flex-items-center py-6">
+  <div class="flex flex-justify-evenly flex-items-start py-6">
 
     <!-- 來源 Excel 檔案 -->
     <div>
@@ -645,6 +671,7 @@ const loadData = async (item) => {
         <el-row class="mb-2" ref="rangeDataList"></el-row>
         <el-row class="rangeColumnSetting flex-col">
           <div class="mb-2" v-for="item in rangeFields" :key="item.id">
+            <el-button type="info" class="mr-2" :icon="EditPen" circle v-blur @click="handleSetPartOfNameForRange(item)" />
             <el-input v-model="item.tempStr">
               <template #prepend>{{ item.rangeColumn }}</template>
             </el-input>
@@ -658,21 +685,13 @@ const loadData = async (item) => {
           <el-button type="primary" :icon="Minus" v-blur @click="handleColSub" />
         </el-row>
         <div class="flex flex-items-center mb-2" v-for="(item, index) in singleFields" :key="item.id">
-          <el-button type="danger" class="mr-2" :icon="Delete" circle v-blur @click="handleDelOne(index)" />
+          <el-button type="info" class="mr-2" :icon="EditPen" circle v-blur @click="handleSetPartOfName(item)" />
           <el-input ref="singleFieldRefs" spellcheck="false" v-model="item.xlsxCol" v-maska:[maskOpts] placeholder="ex:A1" class="mr-2"
             style="width: 60px" />
           <el-input v-model="item.tempStr" spellcheck="false" placeholder="tempStr" class="mr-4" style="width: 100px" />
           <div>{{ item.value }}</div>
         </div>
       </div>
-    </div>
-
-    <!-- 讀取資料按鈕 -->
-    <div class="flex flex-col flex-self-stretch">
-      
-      <hr>
-
-
     </div>
 
     <!-- Excel 模版資料 -->
@@ -717,7 +736,7 @@ const loadData = async (item) => {
       </div>
     </div>
 
-    <!-- 生成資料按鈕 -->
+    <!-- 按鈕 -->
     <div>
       <el-button type="primary" v-blur @click="handleReadSourceData">讀取資料</el-button>
       <hr>

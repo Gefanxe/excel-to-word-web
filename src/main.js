@@ -3,7 +3,7 @@ import ElementPlus from 'element-plus';
 import * as ElementPlusIconsVue from '@element-plus/icons-vue';
 import 'element-plus/dist/index.css';
 import 'virtual:uno.css';
-// import './style.css'
+import './style.css'
 import btn from './directives/btn';
 import App from './App.vue'
 
