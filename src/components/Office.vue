@@ -30,7 +30,6 @@ const uploadSource = ref(null); // <el-upload />
 const sourceExcel = ref(null);
 
 const handleSourceExceed = (files) => {
-  console.log('on exceed!', files[0]);
   const fileExtension = files[0].name.replace(/.+\.(.+)/, '$1');
   if (/xlsx/i.test(fileExtension)) {
     uploadSource.value.clearFiles();
@@ -306,7 +305,7 @@ async function generateExcel(renderDatas) {
           const report = await new Renderer().renderFromArrayBuffer(buffer, renderData);
           const buf = await report.xlsx.writeBuffer();
           // TEST: 名字要怎麼取??
-          const partOfName = (partOfFileName.value !== '') ? partOfFileName.value : `${(idx + 1)}`
+          const partOfName = (partOfFileName.value !== '') ? renderData.data[partOfFileName.value] : `${(idx + 1)}`
           saveAs(new Blob([buf]), `RESULT_${partOfName}_${i+1}_${sourceExcel.name}`);
         }
       }
