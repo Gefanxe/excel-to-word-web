@@ -61,7 +61,7 @@ const modeSwitch = ref(true); // false: 單一, true: 範圍
 // test
 function test() {
   
-  console.log('test: ');
+  console.log('test: ', partOfFileName.value);
   // console.log('test: ', $Event.target);
   
   // console.log('test: ', xlsxData);
@@ -304,21 +304,21 @@ async function generateExcel(renderDatas) {
           const buffer = await readExcelToXlsTmp(sourceExcel);
           const report = await new Renderer().renderFromArrayBuffer(buffer, renderData);
           const buf = await report.xlsx.writeBuffer();
-          // TEST: 名字要怎麼取??
+
           const partOfName = (partOfFileName.value !== '') ? renderData.data[partOfFileName.value] : `${(idx + 1)}`
           saveAs(new Blob([buf]), `RESULT_${partOfName}_${i+1}_${sourceExcel.name}`);
         }
       }
-  } else {
-    const renderData = renderDatas[0];
-    for (let idx = 0; idx < sourceExcels.length; idx++) {
-      const sourceExcel = sourceExcels[idx];
+    } else {
+      const renderData = renderDatas[0];
+      for (let idx = 0; idx < sourceExcels.length; idx++) {
+        const sourceExcel = sourceExcels[idx];
+        
+        const buffer = await readExcelToXlsTmp(sourceExcel);
+        const report = await new Renderer().renderFromArrayBuffer(buffer, renderData);
+        const buf = await report.xlsx.writeBuffer();
 
-      const buffer = await readExcelToXlsTmp(sourceExcel);
-      const report = await new Renderer().renderFromArrayBuffer(buffer, renderData);
-      const buf = await report.xlsx.writeBuffer();
-      // TODO: 名字要怎麼取??
-      const partOfName = (partOfFileName.value !== '') ? partOfFileName.value : `${(idx + 1)}`
+        const partOfName = (partOfFileName.value !== '') ? partOfFileName.value : `${(idx + 1)}`
       saveAs(new Blob([buf]), `RESULT_${partOfName}_${i+1}_${sourceExcel.name}`);
     }
   }
@@ -336,7 +336,8 @@ async function generateWord(renderDatas) {
           const docx = await readWordToDocTmp(sourceWord);
           await docx.renderAsync(renderData);
           const buf = docx.getZip().generate({ type: 'blob' });
-          // TODO: 名字要怎麼取??
+
+          const partOfName = (partOfFileName.value !== '') ? renderData[partOfFileName.value] : `${(idx + 1)}`
           saveAs(buf, `Print_${idx+1}_${i+1}_${sourceWord.name}`);
         }
       }
@@ -348,15 +349,16 @@ async function generateWord(renderDatas) {
       const docx = await readWordToDocTmp(sourceWord);
       await docx.renderAsync(renderData);
       const buf = docx.getZip().generate({ type: 'blob' });
-      // TODO: 名字要怎麼取??
-      saveAs(buf, `Print_${idx+1}_${sourceWord.name}`);
+
+      const partOfName = (partOfFileName.value !== '') ? partOfFileName.value : `${(idx + 1)}`
+      saveAs(buf, `RESULT_${partOfName}_${sourceWord.name}`);
     }
   }
 }
 
 // 生成按鈕函數
 async function handleGenerate() {
-  
+  if (partOfFileName.value === '') return alert('"部份檔名"沒有設定');
   if (sourceExcels.length === 0 && sourceWords.length === 0) return alert('沒有載入任何模版');
 
   const wordRenderDatas = [];
@@ -384,51 +386,66 @@ async function handleGenerate() {
         }
         excelRenderDatas.push(renderData);
       });
-      if (excelRenderDatas.length === 0) return alert('沒有設定資料!');
+      if (excelRenderDatas.length === 0) return alert('資料沒有設定完全!');
     }
 
     // for word
     if (sourceWords.length > 0) {
       xlsxData.forEach((data) => {
-        const renderData = {
-          data: {}
-        };
+        const renderData = {};
         for (const key in data) {
           if (Object.hasOwnProperty.call(data, key)) {
             const fieldValue = data[key];
             rangeFields.forEach((item) => {
               if (key === item.rangeColumn && item.tempStr !== '') {
-                renderData.data[item.tempStr] = fieldValue;
+                renderData[item.tempStr] = fieldValue;
               }
             });
           }
         }
         wordRenderDatas.push(renderData);
       });
-      if (wordRenderDatas.length === 0) return alert('沒有設定資料!');
+      if (wordRenderDatas.length === 0) return alert('資料沒有設定完全!');
     }
 
   } else {
     // 單一欄位
 
     // for excel
-    if (sourceExcels.length > 0) {}
+    if (sourceExcels.length > 0) {
+      const haveSetFlag = true;
+      const renderData = {
+        data: {}
+      };
+      singleFields.forEach((item) => {
+        if (item.xlsxCol !== '' && item.tempStr !== '' && item.value !== '') {
+          renderData.data[item.tempStr] = item.value;
+        } else {
+          haveSetFlag = false;
+        }
+      });
+      if (!haveSetFlag) return alert('資料沒有設定完全!');
+      excelRenderDatas.push(renderData);
+    }
 
     // for word
     if (sourceWords.length > 0) {
-      const haveSetFlag = false;
+      const haveSetFlag = true;
       const renderData = {};
+      
       singleFields.forEach((item) => {
-        if (item.xlsxCol !== '' && item.tempStr !== '') {
+        if (item.xlsxCol !== '' && item.tempStr !== '' && item.value !== '') {
           renderData[item.tempStr] = item.value;
-          haveSetFlag = true;
+        } else {
+          haveSetFlag = false;
         }
       });
-      if (!haveSetFlag) return alert('沒有設定資料!');
+      if (!haveSetFlag) return alert('資料沒有設定完全!');
       wordRenderDatas.push(renderData);
     }
   }
-
+  console.log('excelRenderDatas: ', excelRenderDatas);
+  console.log('wordRenderDatas: ', wordRenderDatas);
   if (sourceExcels.length > 0) await generateExcel(excelRenderDatas);
   if (sourceWords.length > 0) await generateWord(wordRenderDatas);
 
@@ -536,7 +553,7 @@ const loadData = async (item) => {
   
   sourceExcel.value = item.dataSet.sourceExcel;
   modeSwitch.value = item.dataSet.modeSwitch;
-  partOfFileName.value = item.dataSet.partOfFileName;
+  partOfFileName.value = item.dataSet.partOfFileName || '';
   if (modeSwitch.value) {
     isRangeFlag.value = item.dataSet.isRangeFlag;
     if (isRangeFlag.value) {
