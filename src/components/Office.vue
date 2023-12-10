@@ -50,6 +50,7 @@ const handleSourceChanged = (file) => {
     return;
   }
   sourceExcel.value = file.raw;
+  uploadSource.value.handleRemove(file);
 };
 
 // #endregion
@@ -60,11 +61,6 @@ const modeSwitch = ref(true); // false: 單一, true: 範圍
 
 // test
 function test() {
-  
-  console.log('test: ', partOfFileName.value);
-  // console.log('test: ', $Event.target);
-  
-  // console.log('test: ', xlsxData);
 }
 
 // 單一
@@ -122,7 +118,11 @@ function handleSetPartOfNameForRange(item) {
 function readSingle(worksheet) {
   for (let i = 0; i < singleFields.length; i++) {
     const item = singleFields[i];
-    item.value = worksheet[item.xlsxCol].v;
+    if (worksheet[item.xlsxCol]) {
+      item.value = worksheet[item.xlsxCol].v;
+    } else {
+      ElMessage.error({ message: `欄位${item.xlsxCol}沒有資料`, duration: 1100 });
+    }
   }
 }
 
@@ -234,6 +234,7 @@ async function handleExcelChanged(file) {
 
   if (isUploadOk) {
     sourceExcels.push(file.raw);
+    uploadExcel.value.handleRemove(file);
   }
 };
 
@@ -281,9 +282,10 @@ async function handleWordChanged(file) {
     isUploadOk = false;
     alert('請上傳 Word 檔, 副檔名必須為 docx! ', file.name);
   }
-
+  
   if (isUploadOk) {
     sourceWords.push(file.raw);
+    uploadWord.value.handleRemove(file);
   }
 };
 
@@ -297,29 +299,29 @@ const partOfFileName = ref('');
 async function generateExcel(renderDatas) {
   if (modeSwitch.value) {
     for (let idx = 0; idx < sourceExcels.length; idx++) {
-        const sourceExcel = sourceExcels[idx];
+      const sourceExcel = sourceExcels[idx];
 
-        for (let i = 0; i < renderDatas.length; i++) {
-          const renderData = renderDatas[i];
-          const buffer = await readExcelToXlsTmp(sourceExcel);
-          const report = await new Renderer().renderFromArrayBuffer(buffer, renderData);
-          const buf = await report.xlsx.writeBuffer();
-
-          const partOfName = (partOfFileName.value !== '') ? renderData.data[partOfFileName.value] : `${(idx + 1)}`
-          saveAs(new Blob([buf]), `RESULT_${partOfName}_${i+1}_${sourceExcel.name}`);
-        }
-      }
-    } else {
-      const renderData = renderDatas[0];
-      for (let idx = 0; idx < sourceExcels.length; idx++) {
-        const sourceExcel = sourceExcels[idx];
-        
+      for (let i = 0; i < renderDatas.length; i++) {
+        const renderData = renderDatas[i];
         const buffer = await readExcelToXlsTmp(sourceExcel);
         const report = await new Renderer().renderFromArrayBuffer(buffer, renderData);
         const buf = await report.xlsx.writeBuffer();
 
-        const partOfName = (partOfFileName.value !== '') ? partOfFileName.value : `${(idx + 1)}`
-      saveAs(new Blob([buf]), `RESULT_${partOfName}_${i+1}_${sourceExcel.name}`);
+        const partOfName = (partOfFileName.value !== '') ? renderData.data[partOfFileName.value] : `${(idx + 1)}`
+        saveAs(new Blob([buf]), `RESULT_${partOfName}_${i + 1}_${sourceExcel.name}`);
+      }
+    }
+  } else {
+    const renderData = renderDatas[0];
+    for (let idx = 0; idx < sourceExcels.length; idx++) {
+      const sourceExcel = sourceExcels[idx];
+
+      const buffer = await readExcelToXlsTmp(sourceExcel);
+      const report = await new Renderer().renderFromArrayBuffer(buffer, renderData);
+      const buf = await report.xlsx.writeBuffer();
+
+      const partOfName = (partOfFileName.value !== '') ? partOfFileName.value : `${(idx + 1)}`
+      saveAs(new Blob([buf]), `RESULT_${partOfName}_${i + 1}_${sourceExcel.name}`);
     }
   }
 }
@@ -329,18 +331,18 @@ async function generateWord(renderDatas) {
 
   if (modeSwitch.value) {
     for (let idx = 0; idx < sourceWords.length; idx++) {
-        const sourceWord = sourceWords[idx];
+      const sourceWord = sourceWords[idx];
 
-        for (let i = 0; i < renderDatas.length; i++) {
-          const renderData = renderDatas[i];
-          const docx = await readWordToDocTmp(sourceWord);
-          await docx.renderAsync(renderData);
-          const buf = docx.getZip().generate({ type: 'blob' });
+      for (let i = 0; i < renderDatas.length; i++) {
+        const renderData = renderDatas[i];
+        const docx = await readWordToDocTmp(sourceWord);
+        await docx.renderAsync(renderData);
+        const buf = docx.getZip().generate({ type: 'blob' });
 
-          const partOfName = (partOfFileName.value !== '') ? renderData[partOfFileName.value] : `${(idx + 1)}`
-          saveAs(buf, `Print_${idx+1}_${i+1}_${sourceWord.name}`);
-        }
+        const partOfName = (partOfFileName.value !== '') ? renderData[partOfFileName.value] : `${(idx + 1)}`
+        saveAs(buf, `Print_${idx + 1}_${i + 1}_${sourceWord.name}`);
       }
+    }
   } else {
     const renderData = renderDatas[0];
     for (let idx = 0; idx < sourceWords.length; idx++) {
@@ -432,7 +434,7 @@ async function handleGenerate() {
     if (sourceWords.length > 0) {
       const haveSetFlag = true;
       const renderData = {};
-      
+
       singleFields.forEach((item) => {
         if (item.xlsxCol !== '' && item.tempStr !== '' && item.value !== '') {
           renderData[item.tempStr] = item.value;
@@ -444,8 +446,8 @@ async function handleGenerate() {
       wordRenderDatas.push(renderData);
     }
   }
-  console.log('excelRenderDatas: ', excelRenderDatas);
-  console.log('wordRenderDatas: ', wordRenderDatas);
+  // console.log('excelRenderDatas: ', excelRenderDatas);
+  // console.log('wordRenderDatas: ', wordRenderDatas);
   if (sourceExcels.length > 0) await generateExcel(excelRenderDatas);
   if (sourceWords.length > 0) await generateWord(wordRenderDatas);
 
@@ -485,7 +487,6 @@ function handleClear() {
 
 // #endregion
 
-
 // #region 檔案作業
 
 // 目前作業檔案名稱
@@ -502,7 +503,7 @@ const currentLoadFile = ref('');
 const saveData = async () => {
   const _fName = fileName.value;
   const _dataSet = {};
-  
+
   _dataSet.sourceExcel = toRaw(sourceExcel.value);
   _dataSet.modeSwitch = toRaw(modeSwitch.value);
 
@@ -538,8 +539,6 @@ const saveData = async () => {
 
 // 刪檔
 const delData = async (id) => {
-  // const d = await db.mailMergeTool.toArray();
-  // console.log('test: ', d);
   const dCount = await db.mailMergeTool.where('id').anyOf(id).delete();
   ElMessage.error({ message: `刪除了 ${dCount}筆`, duration: 1100 });
 };
@@ -550,7 +549,7 @@ const loadData = async (item) => {
   handleClear();
 
   currentLoadFile.value = item.name;
-  
+
   sourceExcel.value = item.dataSet.sourceExcel;
   modeSwitch.value = item.dataSet.modeSwitch;
   partOfFileName.value = item.dataSet.partOfFileName || '';
@@ -590,6 +589,8 @@ const loadData = async (item) => {
 </script>
 
 <template>
+
+
   <div class="flex">
     <div class="flex-1">
       <!-- 作業操作區 -->
@@ -599,10 +600,10 @@ const loadData = async (item) => {
         <el-input v-model="fileName" placeholder="未儲存作業" style="width: 300px" /> &nbsp;
         <el-button type="primary" v-blur @click="saveData" :disabled="fileName === ''">存檔</el-button>
       </div>
-  
+
       <div>已存檔列表:</div>
       <el-table :data="dataList" height="250" style="width: 400px" size="small" empty-text="無資料">
-        <el-table-column prop="id" label="id" width="34" align="center"/>
+        <el-table-column prop="id" label="id" width="34" align="center" />
         <el-table-column prop="name" label="名稱" />
         <el-table-column label="操作" width="100" align="center">
           <template #default="scope">
@@ -611,7 +612,7 @@ const loadData = async (item) => {
           </template>
         </el-table-column>
       </el-table>
-  
+
     </div>
     <div class="flex-1 flex flex-col">
       <div class="text-center text-xl">來源Excel檔案</div>
@@ -640,36 +641,52 @@ const loadData = async (item) => {
 
   <hr>
 
-  <div class="flex flex-justify-evenly flex-items-start py-6">
+  <div class="flex flex-items-start">
 
-    <!-- 來源 Excel 檔案 -->
-    <div>
-      <h3>來源Excel檔案</h3>
-      <div class="float-left">
+    <!-- 來源 / 模版資料 -->
+    <div class="flex flex-col mr-6">
+
+      <!-- 讀取來源 -->
+      <div>
+        <div class="font-size-4 font-extrabold">來源Excel檔案</div>
         <el-upload ref="uploadSource" drag :limit="1" :auto-upload="false" :on-change="handleSourceChanged"
           :on-exceed="handleSourceExceed">
-          <el-icon>
-            <Plus />
-          </el-icon>
           <div class="el-upload__text">
             將資料來源拖放到此<br>
             或<em>點擊</em>上傳
           </div>
-          <template #tip>
-            <div class="el-upload__tip">
-              僅接受副檔名為xlsx的Excel檔案
-            </div>
-          </template>
+        </el-upload>
+      </div>
+
+      <!-- Excel 模版檔案 -->
+      <div>
+        <div class="font-size-4 font-extrabold">Excel 模版檔案</div>
+        <el-upload ref="uploadExcel" drag :auto-upload="false" :multiple="true" :on-change="handleExcelChanged">
+          <div class="el-upload__text">
+            將資料來源拖放到此<br>
+            或<em>點擊</em>上傳
+          </div>
+        </el-upload>
+      </div>
+
+      <!-- Word 模版檔案 -->
+      <div>
+        <div class="font-size-4 font-extrabold">Word 模版檔案</div>
+        <el-upload ref="uploadWord" drag :auto-upload="false" :multiple="true" :on-change="handleWordChanged">
+          <div class="el-upload__text">
+            將資料來源拖放到此<br>
+            或<em>點擊</em>上傳
+          </div>
         </el-upload>
       </div>
     </div>
 
     <!-- 資料讀取模式 -->
-    <div class="flex flex-col flex-items-center flex-self-stretch">
-      <el-switch v-model="modeSwitch" inline-prompt style="--el-switch-on-color: #13ce66; --el-switch-off-color: #ff4949"
-        active-text="範圍資料" inactive-text="單一欄位" />
+    <div class="flex flex-col flex-items-center flex-self-stretch mr-6">
+
+      <el-switch v-model="modeSwitch" size="large" inline-prompt
+        style="--el-switch-on-color: #13ce66; --el-switch-off-color: #ff4949" active-text="範圍資料" inactive-text="單一欄位" />
       <div v-if="modeSwitch">
-        <h4 class="text-center">範圍資料</h4>
         <el-row class="flex-col flex-items-center mb-4">
           <el-col>
             <el-checkbox v-model="isRangeFlag" label="跳過 or 限定範圍" size="large" />
@@ -684,90 +701,78 @@ const loadData = async (item) => {
             <el-input v-model="rangeEndFlag" v-maska:[maskOpts] class="range-input mx-2" size="small" placeholder="E5" />
           </el-row>
         </el-row>
-        <el-row class="mb-2" ref="rangeDataList"></el-row>
-        <el-row class="rangeColumnSetting flex-col">
-          <div class="mb-2" v-for="item in rangeFields" :key="item.id">
-            <el-button type="info" class="mr-2" :icon="EditPen" circle v-blur @click="handleSetPartOfNameForRange(item)" />
-            <el-input v-model="item.tempStr">
-              <template #prepend>{{ item.rangeColumn }}</template>
-            </el-input>
-          </div>
-        </el-row>
       </div>
       <div v-else>
-        <h4 class="text-center">單一欄位</h4>
         <el-row class="mb-2 flex-justify-center">
           <el-button type="primary" :icon="Plus" v-blur @click="handleColAdd" />
           <el-button type="primary" :icon="Minus" v-blur @click="handleColSub" />
         </el-row>
-        <div class="flex flex-items-center mb-2" v-for="(item, index) in singleFields" :key="item.id">
-          <el-button type="info" class="mr-2" :icon="EditPen" circle v-blur @click="handleSetPartOfName(item)" />
-          <el-input ref="singleFieldRefs" spellcheck="false" v-model="item.xlsxCol" v-maska:[maskOpts] placeholder="ex:A1" class="mr-2"
-            style="width: 60px" />
-          <el-input v-model="item.tempStr" spellcheck="false" placeholder="tempStr" class="mr-4" style="width: 100px" />
-          <div>{{ item.value }}</div>
-        </div>
+      </div>
+
+      <!-- 按鈕 -->
+      <div>
+        <el-button type="primary" v-blur @click="handleReadSourceData">讀取資料</el-button>
+        <el-button type="success" v-blur @click="handleGenerate">生成資料</el-button>
+        <hr>
+        <el-button type="danger" v-blur @click="handleClear">清除資料</el-button>
+        <el-button type="primary" v-blur @click="test">TEST</el-button>
+        <hr>
       </div>
     </div>
 
-    <!-- Excel 模版資料 -->
     <div>
-      <h3>Excel 模版檔案</h3>
-      <div class="float-left">
-        <el-upload ref="uploadExcel" drag :auto-upload="false" :multiple="true" :on-change="handleExcelChanged">
-          <el-icon>
-            <Plus />
-          </el-icon>
-          <div class="el-upload__text">
-            將資料來源拖放到此<br>
-            或<em>點擊</em>上傳
+      <div v-if="modeSwitch">
+        <el-row :gutter="20">
+          <el-col :span="12" ref="rangeDataList"></el-col>
+          <el-col :span="12" class="rangeColumnSetting flex-col">
+            <div class="mb-2" v-for="item in rangeFields" :key="item.id">
+            <el-button type="info" class="mr-2" :icon="EditPen" circle v-blur
+              @click="handleSetPartOfNameForRange(item)" />
+            <el-input v-model="item.tempStr">
+              <template #prepend>{{ item.rangeColumn }}</template>
+            </el-input>
           </div>
-          <template #tip>
-            <div class="el-upload__tip">
-              僅接受副檔名為xlsx的Excel檔案
-            </div>
-          </template>
-        </el-upload>
+          </el-col>
+        </el-row>
+      </div>
+      <div v-else>
+        <table class="text-center">
+          <tr>
+            <td>SET</td>
+            <td>欄</td>
+            <td>變數</td>
+            <td>資料</td>
+          </tr>
+          <tr v-for="(item, index) in singleFields" :key="item.id">
+            <td>
+              <el-button type="info" :icon="EditPen" v-blur @click="handleSetPartOfName(item)" />
+            </td>
+            <td>
+              <el-input ref="singleFieldRefs" spellcheck="false" v-model="item.xlsxCol" v-maska:[maskOpts]
+                placeholder="ex:A1" style="width: 60px" />
+            </td>
+            <td>
+              <el-input v-model="item.tempStr" spellcheck="false" placeholder="tempStr" style="width: 100px" />
+            </td>
+            <td>
+              <div class="mx-2">{{ item.value }}</div>
+            </td>
+          </tr>
+        </table>
       </div>
     </div>
 
-    <!-- Word 模版資料 -->
-    <div>
-      <h3>Word 模版檔案</h3>
-      <div class="float-left">
-        <el-upload ref="uploadWord" drag :auto-upload="false" :multiple="true" :on-change="handleWordChanged">
-          <el-icon>
-            <Plus />
-          </el-icon>
-          <div class="el-upload__text">
-            將資料來源拖放到此<br>
-            或<em>點擊</em>上傳
-          </div>
-          <template #tip>
-            <div class="el-upload__tip">
-              僅接受副檔名為docx的Word檔案
-            </div>
-          </template>
-        </el-upload>
-      </div>
-    </div>
-
-    <!-- 按鈕 -->
-    <div>
-      <el-button type="primary" v-blur @click="handleReadSourceData">讀取資料</el-button>
-      <hr>
-      <el-button type="success" v-blur @click="handleGenerate">生成資料</el-button>
-      <hr>
-      <el-button type="danger" v-blur @click="handleClear">清除資料</el-button>
-      <hr>
-      <el-button type="primary" v-blur @click="test">TEST</el-button>
-    </div>
 
   </div>
 
 </template>
 
 <style scoped>
+:deep(.el-upload-dragger) {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
 :deep(.range-input.el-input) {
   width: 20%;
   display: inline;
@@ -780,7 +785,6 @@ const loadData = async (item) => {
 .rangeColumnSetting .el-input {
   width: 220px;
 }
-
 </style>
 
 <style>
