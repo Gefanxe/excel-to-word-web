@@ -282,7 +282,7 @@ async function handleWordChanged(file) {
     isUploadOk = false;
     alert('請上傳 Word 檔, 副檔名必須為 docx! ', file.name);
   }
-  
+
   if (isUploadOk) {
     sourceWords.push(file.raw);
     uploadWord.value.handleRemove(file);
@@ -340,7 +340,7 @@ async function generateWord(renderDatas) {
         const buf = docx.getZip().generate({ type: 'blob' });
 
         const partOfName = (partOfFileName.value !== '') ? renderData[partOfFileName.value] : `${(idx + 1)}`
-        saveAs(buf, `Print_${idx + 1}_${i + 1}_${sourceWord.name}`);
+        saveAs(buf, `RESULT_${partOfName}_${i + 1}_${sourceWord.name}`);
       }
     }
   } else {
@@ -589,10 +589,10 @@ const loadData = async (item) => {
 </script>
 
 <template>
-
-
   <div class="flex">
-    <div class="flex-1">
+
+    <!-- 檔案操作 -->
+    <div class="mr-6">
       <!-- 作業操作區 -->
       <div>目前讀入的檔: <el-text class="mx-1" size="large" tag="b" type="success">{{ currentLoadFile }}</el-text></div>
       <hr>
@@ -602,7 +602,7 @@ const loadData = async (item) => {
       </div>
 
       <div>已存檔列表:</div>
-      <el-table :data="dataList" height="250" style="width: 400px" size="small" empty-text="無資料">
+      <el-table :data="dataList" height="300" style="width: 400px" size="small" empty-text="無資料">
         <el-table-column prop="id" label="id" width="34" align="center" />
         <el-table-column prop="name" label="名稱" />
         <el-table-column label="操作" width="100" align="center">
@@ -614,44 +614,46 @@ const loadData = async (item) => {
       </el-table>
 
     </div>
-    <div class="flex-1 flex flex-col">
-      <div class="text-center text-xl">來源Excel檔案</div>
-      <div class="flex-1 text-center">
-        <div class=" color-green">
+
+    <!-- 目前載入資訊1 -->
+    <div class="mr-6 flex flex-col">
+      <div class="text-center text-xl color-gray-400">來源Excel檔案</div>
+      <div class="flex-1 flex flex-col justify-center text-center">
+        <div class=" color-green-600">
           {{ sourceExcel?.name }}
         </div>
       </div>
+
       <div class="text-center text-xl">設定</div>
       <div class="flex-1 text-center">
         <div v-if="fileName !== ''">{{ (modeSwitch) ? '範圍資料' : '單一欄位' }}</div>
         <div>輸入的部份檔名: <span>{{ partOfFileName }}</span></div>
       </div>
     </div>
-    <div class="flex-1 flex flex-col">
-      <div class="text-center text-xl">Excel模版檔案</div>
-      <div class="flex-1 text-center">
+
+    <!-- 目前載入資訊2 -->
+    <div class="mr-6 flex flex-col">
+
+      <div class="text-center text-xl color-gray-400">Excel模版檔案</div>
+      <div class="flex-1 flex flex-col justify-center text-center">
         <div class="color-green" v-for="item in sourceExcels" :key="item.uid">{{ item.name }}</div>
       </div>
-      <div class="text-center text-xl">Word模版檔案</div>
-      <div class="flex-1 text-center">
+      <div class="text-center text-xl color-gray-400">Word模版檔案</div>
+      <div class="flex-1 flex flex-col justify-center text-center">
         <div class="color-blue" v-for="item in sourceWords" :key="item.uid">{{ item.name }}</div>
       </div>
+
     </div>
-  </div>
-
-  <hr>
-
-  <div class="flex flex-items-start">
 
     <!-- 來源 / 模版資料 -->
-    <div class="flex flex-col mr-6">
+    <div class="mr-6 flex flex-col flex-justify-between">
 
       <!-- 讀取來源 -->
       <div>
-        <div class="font-size-4 font-extrabold">來源Excel檔案</div>
         <el-upload ref="uploadSource" drag :limit="1" :auto-upload="false" :on-change="handleSourceChanged"
           :on-exceed="handleSourceExceed">
           <div class="el-upload__text">
+            <div class="text-xl font-extrabold">來源Excel</div>
             將資料來源拖放到此<br>
             或<em>點擊</em>上傳
           </div>
@@ -660,9 +662,9 @@ const loadData = async (item) => {
 
       <!-- Excel 模版檔案 -->
       <div>
-        <div class="font-size-4 font-extrabold">Excel 模版檔案</div>
         <el-upload ref="uploadExcel" drag :auto-upload="false" :multiple="true" :on-change="handleExcelChanged">
           <div class="el-upload__text">
+            <div class="text-xl font-extrabold">Excel模版</div>
             將資料來源拖放到此<br>
             或<em>點擊</em>上傳
           </div>
@@ -671,9 +673,9 @@ const loadData = async (item) => {
 
       <!-- Word 模版檔案 -->
       <div>
-        <div class="font-size-4 font-extrabold">Word 模版檔案</div>
         <el-upload ref="uploadWord" drag :auto-upload="false" :multiple="true" :on-change="handleWordChanged">
           <div class="el-upload__text">
+            <div class="text-xl font-extrabold">Word模版</div>
             將資料來源拖放到此<br>
             或<em>點擊</em>上傳
           </div>
@@ -682,7 +684,7 @@ const loadData = async (item) => {
     </div>
 
     <!-- 資料讀取模式 -->
-    <div class="flex flex-col flex-items-center flex-self-stretch mr-6">
+    <div class="flex flex-col flex-items-center flex-self-stretch">
 
       <el-switch v-model="modeSwitch" size="large" inline-prompt
         style="--el-switch-on-color: #13ce66; --el-switch-off-color: #ff4949" active-text="範圍資料" inactive-text="單一欄位" />
@@ -720,18 +722,25 @@ const loadData = async (item) => {
       </div>
     </div>
 
+  </div>
+
+  <hr>
+
+  <div class="flex flex-items-start">
+
+    <!-- 載入資訊後設定 -->
     <div>
       <div v-if="modeSwitch">
         <el-row :gutter="20">
           <el-col :span="12" ref="rangeDataList"></el-col>
           <el-col :span="12" class="rangeColumnSetting flex-col">
             <div class="mb-2" v-for="item in rangeFields" :key="item.id">
-            <el-button type="info" class="mr-2" :icon="EditPen" circle v-blur
-              @click="handleSetPartOfNameForRange(item)" />
-            <el-input v-model="item.tempStr">
-              <template #prepend>{{ item.rangeColumn }}</template>
-            </el-input>
-          </div>
+              <el-button type="info" class="mr-2" :icon="EditPen" circle v-blur
+                @click="handleSetPartOfNameForRange(item)" />
+              <el-input v-model="item.tempStr">
+                <template #prepend>{{ item.rangeColumn }}</template>
+              </el-input>
+            </div>
           </el-col>
         </el-row>
       </div>
@@ -762,15 +771,13 @@ const loadData = async (item) => {
       </div>
     </div>
 
-
   </div>
-
 </template>
 
 <style scoped>
 :deep(.el-upload-dragger) {
-  padding-top: 10px;
-  padding-bottom: 10px;
+  padding-top: 30px;
+  padding-bottom: 30px;
 }
 
 :deep(.range-input.el-input) {
