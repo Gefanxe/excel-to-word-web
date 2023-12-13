@@ -7,6 +7,7 @@ import xlsx, { read } from 'xlsx';
 import PizZip from "pizzip";
 import { Renderer } from 'xlsx-renderer'
 import Docxtemplater from "docxtemplater";
+import nzhhk from 'nzh/hk';
 import saveAs from 'save-as';
 import { Plus, Minus, Delete, EditPen } from '@element-plus/icons-vue';
 import { liveQuery } from 'dexie';
@@ -129,7 +130,7 @@ function readSingle(worksheet) {
 // 範圍
 
 const rangeFields = reactive([]);
-let xlsxData = [];
+const xlsxData = ref([]);
 
 /** @type { import('vue').Ref<import('xlsx').Sheet2JSONOpts> } */
 const rangeFieldSetting = ref();
@@ -147,24 +148,24 @@ const isRangeFlag = ref(true);
 const rangeStartFlag = ref('');
 const rangeEndFlag = ref('');
 
-/** @type { import('vue').Ref<import('element-plus').RowInstance> } */
-const rangeDataList = ref(null);
+/** @type { import('vue').Ref<HTMLDivElement> } */
+// const rangeDataList = ref(null);
 
 function readDataRange(worksheet) {
   // 整個工作表輸出 json
-  xlsxData = xlsx.utils.sheet_to_json(worksheet, rangeFieldSetting.value);
-  const jsonSheet = xlsx.utils.json_to_sheet(xlsxData);
-  const xlsxDataShow = xlsx.utils.sheet_to_html(jsonSheet, {
-    id: 'sourceTable'
+  const sheetJson = xlsx.utils.sheet_to_json(worksheet, rangeFieldSetting.value);
+  sheetJson.forEach((item) => {
+    xlsxData.value.push(item);
   });
-  rangeDataList.value.$el.innerHTML = xlsxDataShow;
 
+  console.log('xlsxData: ', xlsxData.value)
   rangeFields.length = 0;
-  Object.keys(xlsxData[0]).forEach((item, idx) => {
+  Object.keys(xlsxData.value[0]).forEach((item, idx) => {
     rangeFields.push({
       id: Date.now() + idx,
       rangeColumn: item,
-      tempStr: ''
+      tempStr: '',
+      toNzhhk: false,
     });
   });
 }
@@ -368,11 +369,11 @@ async function handleGenerate() {
 
   if (modeSwitch.value) {
     // 範圍
-    if (xlsxData.length === 0) return alert('沒有來源資料!');
+    if (xlsxData.value.length === 0) return alert('沒有來源資料!');
 
     // for excel
     if (sourceExcels.length > 0) {
-      xlsxData.forEach((data) => {
+      xlsxData.value.forEach((data) => {
         const renderData = {
           data: {}
         };
@@ -393,7 +394,7 @@ async function handleGenerate() {
 
     // for word
     if (sourceWords.length > 0) {
-      xlsxData.forEach((data) => {
+      xlsxData.value.forEach((data) => {
         const renderData = {};
         for (const key in data) {
           if (Object.hasOwnProperty.call(data, key)) {
@@ -415,7 +416,7 @@ async function handleGenerate() {
 
     // for excel
     if (sourceExcels.length > 0) {
-      const haveSetFlag = true;
+      let haveSetFlag = true;
       const renderData = {
         data: {}
       };
@@ -432,7 +433,7 @@ async function handleGenerate() {
 
     // for word
     if (sourceWords.length > 0) {
-      const haveSetFlag = true;
+      let haveSetFlag = true;
       const renderData = {};
 
       singleFields.forEach((item) => {
@@ -474,8 +475,9 @@ function handleClear() {
 
   if (modeSwitch.value) {
     rangeFields.length = 0;
-    xlsxData.length = 0;
-    rangeDataList.value.$el.innerHTML = '';
+    xlsxData.value.length = 0;
+    console.log('handleClear!');
+    // rangeDataList.value.innerHTML = '';
   } else {
     while (singleFields.length > 0) {
       singleFields.pop();
@@ -558,10 +560,6 @@ const loadData = async (item) => {
     if (isRangeFlag.value) {
       rangeFieldSetting.value = item.dataSet.rangeFieldSetting;
       await handleReadSourceData();
-      rangeFields.length = 0;
-      item.dataSet.rangeFields.forEach((field) => {
-        rangeFields.push(field);
-      });
     } else {
       rangeStartFlag.value = item.dataSet.rangeStartFlag;
       rangeEndFlag.value = item.dataSet.rangeEndFlag;
@@ -582,6 +580,7 @@ const loadData = async (item) => {
   });
 
   ElMessage.success({ message: `已讀取: ${item.name}`, duration: 1100 });
+  console.log('loaded');
 };
 
 // #endregion
@@ -626,8 +625,8 @@ const loadData = async (item) => {
 
       <div class="text-center text-xl">設定</div>
       <div class="flex-1 text-center">
-        <div v-if="fileName !== ''">{{ (modeSwitch) ? '範圍資料' : '單一欄位' }}</div>
-        <div>輸入的部份檔名: <span>{{ partOfFileName }}</span></div>
+        <div>輸入的部份檔名:</div>
+        <div>{{ partOfFileName }}</div>
       </div>
     </div>
 
@@ -727,48 +726,68 @@ const loadData = async (item) => {
   <hr>
 
   <div class="flex flex-items-start">
-
     <!-- 載入資訊後設定 -->
-    <div>
-      <div v-if="modeSwitch">
-        <el-row :gutter="20">
-          <el-col :span="12" ref="rangeDataList"></el-col>
-          <el-col :span="12" class="rangeColumnSetting flex-col">
-            <div class="mb-2" v-for="item in rangeFields" :key="item.id">
-              <el-button type="info" class="mr-2" :icon="EditPen" circle v-blur
-                @click="handleSetPartOfNameForRange(item)" />
-              <el-input v-model="item.tempStr">
-                <template #prepend>{{ item.rangeColumn }}</template>
-              </el-input>
-            </div>
-          </el-col>
-        </el-row>
-      </div>
-      <div v-else>
-        <table class="text-center">
-          <tr>
-            <td>SET</td>
-            <td>欄</td>
-            <td>變數</td>
-            <td>資料</td>
-          </tr>
-          <tr v-for="(item, index) in singleFields" :key="item.id">
-            <td>
-              <el-button type="info" :icon="EditPen" v-blur @click="handleSetPartOfName(item)" />
-            </td>
-            <td>
-              <el-input ref="singleFieldRefs" spellcheck="false" v-model="item.xlsxCol" v-maska:[maskOpts]
-                placeholder="ex:A1" style="width: 60px" />
-            </td>
-            <td>
-              <el-input v-model="item.tempStr" spellcheck="false" placeholder="tempStr" style="width: 100px" />
-            </td>
-            <td>
-              <div class="mx-2">{{ item.value }}</div>
-            </td>
-          </tr>
+    <div class="flex-1" v-if="modeSwitch">
+      <el-row v-if="xlsxData.length > 0">
+        <table border="1">
+          <thead>
+            <tr>
+              <th v-for="item in rangeFields" :key="item.id">
+                <el-button
+                  :type="(partOfFileName !== '' && item.tempStr === partOfFileName) ? 'primary' : 'info'"
+                  class="mr-2"
+                  v-blur
+                  @click="handleSetPartOfNameForRange(item)"
+                >{{ item.rangeColumn }}</el-button>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(tr , idx) in xlsxData" :key="`tr_${idx}`">
+              <td class="text-center" v-for="(item, i) in rangeFields" :key="`td_${i}`">{{ tr[item.rangeColumn] }}</td>
+            </tr>
+            <tr>
+              <td class="text-center" v-for="(item, i) in rangeFields" :key="`tool_${i}`">
+                <el-input v-model="item.tempStr" style="width: 100px;" /> <br>
+                <el-switch
+                  v-model="item.toNzhhk"
+                  class="ml-2"
+                  size="large"
+                  inline-prompt
+                  active-text="國字數字"
+                  inactive-text="阿拉伯"
+                />
+              </td>
+            </tr>
+          </tbody>
         </table>
-      </div>
+
+      </el-row>
+    </div>
+    <div class="flex-1" v-else>
+      <table class="text-center">
+        <tr>
+          <td>SET</td>
+          <td>欄</td>
+          <td>變數</td>
+          <td>資料</td>
+        </tr>
+        <tr v-for="(item, index) in singleFields" :key="item.id">
+          <td>
+            <el-button type="info" :icon="EditPen" v-blur @click="handleSetPartOfName(item)" />
+          </td>
+          <td>
+            <el-input ref="singleFieldRefs" spellcheck="false" v-model="item.xlsxCol" v-maska:[maskOpts]
+              placeholder="ex:A1" style="width: 60px" />
+          </td>
+          <td>
+            <el-input v-model="item.tempStr" spellcheck="false" placeholder="tempStr" style="width: 100px" />
+          </td>
+          <td>
+            <div class="mx-2">{{ item.value }}</div>
+          </td>
+        </tr>
+      </table>
     </div>
 
   </div>
