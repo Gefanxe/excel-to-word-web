@@ -25,6 +25,12 @@ const maskOpts = {
   }
 }; // preProcess 可以做到的事, 也可以在tokens.transform裡做
 
+// 判斷字串是否為數字
+function isNumeric(str) {
+  if (typeof str != "string") return false;
+  return !isNaN(str) && !isNaN(parseFloat(str));
+}
+
 // #region 資料來源
 /** @type { import('vue').Ref<import('element-plus').UploadInstance> } */
 const uploadSource = ref(null); // <el-upload />
@@ -152,6 +158,7 @@ const rangeEndFlag = ref('');
 // const rangeDataList = ref(null);
 
 function readDataRange(worksheet) {
+  xlsxData.value.length = 0;
   // 整個工作表輸出 json
   const sheetJson = xlsx.utils.sheet_to_json(worksheet, rangeFieldSetting.value);
   sheetJson.forEach((item) => {
@@ -165,7 +172,7 @@ function readDataRange(worksheet) {
       id: Date.now() + idx,
       rangeColumn: item,
       tempStr: '',
-      toNzhhk: false,
+      isNum: isNumeric(xlsxData.value[0][item])
     });
   });
 }
@@ -190,6 +197,23 @@ function handleReadSourceData() {
         readSingle(worksheet);
       }
       resolve('ok');
+    }
+  });
+}
+
+// (範圍)轉阿拉伯數字
+function handleToArabic(col) {
+  xlsxData.value.forEach((data) => {
+    if (!isNumeric(data[col])) {
+      data[col] = nzhhk.decodeB(data[col]).toString();
+    }
+  });
+}
+// (範圍)轉國字數字
+function handleToNzhhk(col) {
+  xlsxData.value.forEach((data) => {
+    if (isNumeric(data[col])) {
+      data[col] = nzhhk.encodeB(data[col]);
     }
   });
 }
@@ -733,30 +757,20 @@ const loadData = async (item) => {
           <thead>
             <tr>
               <th v-for="item in rangeFields" :key="item.id">
-                <el-button
-                  :type="(partOfFileName !== '' && item.tempStr === partOfFileName) ? 'primary' : 'info'"
-                  class="mr-2"
-                  v-blur
-                  @click="handleSetPartOfNameForRange(item)"
-                >{{ item.rangeColumn }}</el-button>
+                <el-button :type="(partOfFileName !== '' && item.tempStr === partOfFileName) ? 'primary' : 'info'"
+                  class="mr-2" v-blur @click="handleSetPartOfNameForRange(item)">{{ item.rangeColumn }}</el-button>
               </th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(tr , idx) in xlsxData" :key="`tr_${idx}`">
+            <tr v-for="(tr, idx) in xlsxData" :key="`tr_${idx}`">
               <td class="text-center" v-for="(item, i) in rangeFields" :key="`td_${i}`">{{ tr[item.rangeColumn] }}</td>
             </tr>
             <tr>
               <td class="text-center" v-for="(item, i) in rangeFields" :key="`tool_${i}`">
                 <el-input v-model="item.tempStr" style="width: 100px;" /> <br>
-                <el-switch
-                  v-model="item.toNzhhk"
-                  class="ml-2"
-                  size="large"
-                  inline-prompt
-                  active-text="國字數字"
-                  inactive-text="阿拉伯"
-                />
+                <el-button v-if="item.isNum" type="primary" v-blur @click="handleToNzhhk(item.rangeColumn)">國</el-button>
+                <el-button v-if="item.isNum" type="success" v-blur @click="handleToArabic(item.rangeColumn)">阿</el-button>
               </td>
             </tr>
           </tbody>
