@@ -1,15 +1,15 @@
 <script setup>
 import { ref, reactive, watch, toRaw } from 'vue';
 import { ElMessage } from 'element-plus'
-import { genFileId, switchProps, uploadBaseProps } from 'element-plus';
+import { genFileId } from 'element-plus';
 import { vMaska } from 'maska';
-import xlsx, { read } from 'xlsx';
+import xlsx from 'xlsx';
 import PizZip from "pizzip";
 import { Renderer } from 'xlsx-renderer'
 import Docxtemplater from "docxtemplater";
 import nzhhk from 'nzh/hk';
 import saveAs from 'save-as';
-import { Plus, Minus, Delete, EditPen } from '@element-plus/icons-vue';
+import { Plus, Minus, EditPen } from '@element-plus/icons-vue';
 import { liveQuery } from 'dexie';
 import { useObservable } from '@vueuse/rxjs';
 import { db } from '../utils/db';
@@ -76,7 +76,9 @@ const singleFields = reactive([
     id: Date.now(),
     xlsxCol: '',
     tempStr: '',
-    value: ''
+    value: '',
+    isNum: false,
+    nzhhk: false
   }
 ]);
 
@@ -96,7 +98,9 @@ function handleColAdd() {
     id: Date.now(),
     xlsxCol: '',
     tempStr: '',
-    value: ''
+    value: '',
+    isNum: false,
+    nzhhk: false
   });
 }
 
@@ -126,7 +130,9 @@ function readSingle(worksheet) {
   for (let i = 0; i < singleFields.length; i++) {
     const item = singleFields[i];
     if (worksheet[item.xlsxCol]) {
-      item.value = worksheet[item.xlsxCol].v;
+      const val = worksheet[item.xlsxCol].v;
+      if (isNumeric(val)) item.isNum = true;
+      if (item.nzhhk) item.value = nzhhk.encodeB(val);
     } else {
       ElMessage.error({ message: `欄位${item.xlsxCol}沒有資料`, duration: 1100 });
     }
@@ -157,7 +163,7 @@ const rangeEndFlag = ref('');
 /** @type { import('vue').Ref<HTMLDivElement> } */
 // const rangeDataList = ref(null);
 
-function readDataRange(worksheet) {
+function readDataRange(worksheet, rangeFieldsFromLoad) {
   xlsxData.value.length = 0;
   // 整個工作表輸出 json
   const sheetJson = xlsx.utils.sheet_to_json(worksheet, rangeFieldSetting.value);
@@ -167,18 +173,31 @@ function readDataRange(worksheet) {
 
   console.log('xlsxData: ', xlsxData.value)
   rangeFields.length = 0;
-  Object.keys(xlsxData.value[0]).forEach((item, idx) => {
-    rangeFields.push({
-      id: Date.now() + idx,
-      rangeColumn: item,
-      tempStr: '',
-      isNum: isNumeric(xlsxData.value[0][item])
+  if (rangeFieldsFromLoad) {
+    rangeFieldsFromLoad.forEach(item => {
+      rangeFields.push(item);
     });
-  });
+    rangeFields.forEach(item => {
+      if (item.nzhhk) {
+        item.nzhhk = false;
+        handleTransNumberR(item);
+      }
+    });
+  } else {
+    Object.keys(xlsxData.value[0]).forEach((item, idx) => {
+      rangeFields.push({
+        id: Date.now() + idx,
+        rangeColumn: item,
+        tempStr: '',
+        isNum: isNumeric(xlsxData.value[0][item]),
+        nzhhk: false
+      });
+    });
+  }
 }
 
 // 讀取來源
-function handleReadSourceData() {
+function handleReadSourceData(loadData) {
   if (!sourceExcel.value) return alert('沒有來源資料!');
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -191,7 +210,7 @@ function handleReadSourceData() {
 
       if (modeSwitch.value) {
         // 範圍資料讀取
-        readDataRange(worksheet);
+        readDataRange(worksheet, loadData?.rangeFields || null);
       } else {
         // 單一欄位讀取
         readSingle(worksheet);
@@ -201,21 +220,19 @@ function handleReadSourceData() {
   });
 }
 
-// (範圍)轉阿拉伯數字
-function handleToArabic(col) {
-  xlsxData.value.forEach((data) => {
-    if (!isNumeric(data[col])) {
-      data[col] = nzhhk.decodeB(data[col]).toString();
-    }
-  });
+// (單一) 阿拉伯數字 <=> 國字 轉換
+function handleTransNumberS(item) {
+  item.value = (!item.nzhhk) ? nzhhk.encodeB(item.value) : nzhhk.decodeB(item.value).toString();
+  item.nzhhk = !item.nzhhk;
 }
-// (範圍)轉國字數字
-function handleToNzhhk(col) {
+
+// (範圍) 阿拉伯數字 <=> 國字 轉換
+function handleTransNumberR(item) {
+  const col = item.rangeColumn;
   xlsxData.value.forEach((data) => {
-    if (isNumeric(data[col])) {
-      data[col] = nzhhk.encodeB(data[col]);
-    }
+    data[col] = (!item.nzhhk) ? nzhhk.encodeB(data[col]) : nzhhk.decodeB(data[col]).toString();
   });
+  item.nzhhk = !item.nzhhk;
 }
 
 // #endregion
@@ -500,8 +517,6 @@ function handleClear() {
   if (modeSwitch.value) {
     rangeFields.length = 0;
     xlsxData.value.length = 0;
-    console.log('handleClear!');
-    // rangeDataList.value.innerHTML = '';
   } else {
     while (singleFields.length > 0) {
       singleFields.pop();
@@ -583,7 +598,7 @@ const loadData = async (item) => {
     isRangeFlag.value = item.dataSet.isRangeFlag;
     if (isRangeFlag.value) {
       rangeFieldSetting.value = item.dataSet.rangeFieldSetting;
-      await handleReadSourceData();
+      await handleReadSourceData({rangeFields: item.dataSet.rangeFields});
     } else {
       rangeStartFlag.value = item.dataSet.rangeStartFlag;
       rangeEndFlag.value = item.dataSet.rangeEndFlag;
@@ -761,16 +776,25 @@ const loadData = async (item) => {
                   class="mr-2" v-blur @click="handleSetPartOfNameForRange(item)">{{ item.rangeColumn }}</el-button>
               </th>
             </tr>
+            <tr>
+              <th class="text-center" v-for="(item, i) in rangeFields" :key="`tool1_${i}`">
+                <el-input v-model="item.tempStr" style="width: 100px;" /> <br>
+              </th>
+            </tr>
           </thead>
           <tbody>
             <tr v-for="(tr, idx) in xlsxData" :key="`tr_${idx}`">
               <td class="text-center" v-for="(item, i) in rangeFields" :key="`td_${i}`">{{ tr[item.rangeColumn] }}</td>
             </tr>
             <tr>
-              <td class="text-center" v-for="(item, i) in rangeFields" :key="`tool_${i}`">
-                <el-input v-model="item.tempStr" style="width: 100px;" /> <br>
-                <el-button v-if="item.isNum" type="primary" v-blur @click="handleToNzhhk(item.rangeColumn)">國</el-button>
-                <el-button v-if="item.isNum" type="success" v-blur @click="handleToArabic(item.rangeColumn)">阿</el-button>
+              <td class="text-center" v-for="(item, i) in rangeFields" :key="`tool2_${i}`">
+                <el-button
+                  v-if="item.isNum"
+                  :type="(!item.nzhhk) ? 'primary' : 'success'"
+                  v-blur
+                  @click="handleTransNumberR(item)">
+                  {{ (!item.nzhhk) ? '轉國字' : '轉數字' }}
+                </el-button>
               </td>
             </tr>
           </tbody>
@@ -782,6 +806,7 @@ const loadData = async (item) => {
       <table class="text-center">
         <tr>
           <td>SET</td>
+          <td>功能</td>
           <td>欄</td>
           <td>變數</td>
           <td>資料</td>
@@ -789,6 +814,15 @@ const loadData = async (item) => {
         <tr v-for="(item, index) in singleFields" :key="item.id">
           <td>
             <el-button type="info" :icon="EditPen" v-blur @click="handleSetPartOfName(item)" />
+          </td>
+          <td>
+            <el-button
+              v-if="item.isNum"
+              :type="(!item.nzhhk) ? 'primary' : 'success'"
+              v-blur
+              @click="handleTransNumberS(item)">
+              {{ (!item.nzhhk) ? '轉國字' : '轉數字' }}
+            </el-button>
           </td>
           <td>
             <el-input ref="singleFieldRefs" spellcheck="false" v-model="item.xlsxCol" v-maska:[maskOpts]
