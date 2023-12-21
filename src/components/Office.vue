@@ -349,7 +349,7 @@ async function generateExcel(renderDatas) {
         const report = await new Renderer().renderFromArrayBuffer(buffer, renderData);
         const buf = await report.xlsx.writeBuffer();
 
-        const partOfName = (partOfFileName.value !== '') ? renderData.data[partOfFileName.value] : `${(idx + 1)}`
+        const partOfName = (partOfFileName.value !== '') ? renderData[partOfFileName.value] : `${(idx + 1)}`
         saveAs(new Blob([buf]), `RESULT_${partOfName}_${i + 1}_${sourceExcel.name}`);
       }
     }
@@ -363,7 +363,7 @@ async function generateExcel(renderDatas) {
       const buf = await report.xlsx.writeBuffer();
 
       const partOfName = (partOfFileName.value !== '') ? partOfFileName.value : `${(idx + 1)}`
-      saveAs(new Blob([buf]), `RESULT_${partOfName}_${i + 1}_${sourceExcel.name}`);
+      saveAs(new Blob([buf]), `RESULT_${partOfName}_${idx + 1}_${sourceExcel.name}`);
     }
   }
 }
@@ -382,7 +382,7 @@ async function generateWord(renderDatas) {
         const buf = docx.getZip().generate({ type: 'blob' });
 
         const partOfName = (partOfFileName.value !== '') ? renderData[partOfFileName.value] : `${(idx + 1)}`
-        saveAs(buf, `RESULT_${partOfName}_${i + 1}_${sourceWord.name}`);
+        saveAs(buf, `RESULT_${partOfName}_${sourceWord.name}`);
       }
     }
   } else {
@@ -415,15 +415,13 @@ async function handleGenerate() {
     // for excel
     if (sourceExcels.length > 0) {
       xlsxData.value.forEach((data) => {
-        const renderData = {
-          data: {}
-        };
+        const renderData = {};
         for (const key in data) {
           if (Object.hasOwnProperty.call(data, key)) {
             const fieldValue = data[key];
             rangeFields.forEach((item) => {
               if (key === item.rangeColumn && item.tempStr !== '') {
-                renderData.data[item.tempStr] = fieldValue;
+                renderData[item.tempStr] = fieldValue;
               }
             });
           }
@@ -458,12 +456,10 @@ async function handleGenerate() {
     // for excel
     if (sourceExcels.length > 0) {
       let haveSetFlag = true;
-      const renderData = {
-        data: {}
-      };
+      const renderData = {};
       singleFields.forEach((item) => {
         if (item.xlsxCol !== '' && item.tempStr !== '' && item.value !== '') {
-          renderData.data[item.tempStr] = item.value;
+          renderData[item.tempStr] = item.value;
         } else {
           haveSetFlag = false;
         }
