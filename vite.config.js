@@ -6,15 +6,19 @@ import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 
 // https://vitejs.dev/config/
-export default defineConfig({
-  plugins: [
-    AutoImport({
-      resolvers: [ElementPlusResolver()],
-    }),
-    Components({
-      resolvers: [ElementPlusResolver()],
-    }),
-    vue(),
-    UnoCSS()
-  ],
+export default defineConfig((command, mode) => {
+
+  return {
+    base: (mode === 'page') ? '/excel-to-word-web/' : '/',
+    plugins: [
+      AutoImport({
+        resolvers: [ElementPlusResolver()],
+      }),
+      Components({
+        resolvers: [ElementPlusResolver()],
+      }),
+      vue(),
+      UnoCSS()
+    ],
+  };
 })

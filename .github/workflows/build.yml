@@ -21,7 +21,7 @@ jobs:
         run: npm install --prefer-offline
 
       - name: Build
-        run: npm run build
+        run: npm run build:page
 
       - name: Deploy
         uses: JamesIves/github-pages-deploy-action@v4
