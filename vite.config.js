@@ -6,7 +6,8 @@ import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 
 // https://vitejs.dev/config/
-export default defineConfig((command, mode) => {
+export default defineConfig(({ command, mode }) => {
+  console.log('command: ', command);
   console.log('mode: ', mode);
   return {
     base: (mode === 'page') ? '/excel-to-word-web/' : '/',
