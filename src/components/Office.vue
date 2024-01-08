@@ -131,8 +131,10 @@ function readSingle(worksheet) {
     const item = singleFields[i];
     if (worksheet[item.xlsxCol]) {
       const val = worksheet[item.xlsxCol].v;
+      console.log('val: ', val);
       if (isNumeric(val)) item.isNum = true;
-      if (item.nzhhk) item.value = nzhhk.encodeB(val);
+      // if (item.nzhhk) item.value = nzhhk.encodeB(val);
+      item.value = (item.nzhhk) ? nzhhk.encodeB(val) : val;
     } else {
       ElMessage.error({ message: `欄位${item.xlsxCol}沒有資料`, duration: 1100 });
     }
