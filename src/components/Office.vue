@@ -1,4 +1,5 @@
 <script setup>
+// #region import
 import { ref, reactive, watch, toRaw } from 'vue';
 import { ElMessage } from 'element-plus'
 import { genFileId } from 'element-plus';
@@ -13,6 +14,7 @@ import { Plus, Minus, EditPen } from '@element-plus/icons-vue';
 import { liveQuery } from 'dexie';
 import { useObservable } from '@vueuse/rxjs';
 import { db } from '../utils/db';
+// #endregion
 
 /** @type { import('maska').MaskInputOptions } */
 const maskOpts = {
@@ -33,8 +35,9 @@ function isNumeric(str) {
 
 // #region 資料來源
 /** @type { import('vue').Ref<import('element-plus').UploadInstance> } */
-const uploadSource = ref(null); // <el-upload />
+const uploadSource = ref(null);
 const sourceExcel = ref(null);
+const sourceSheetName = ref(null);
 
 const handleSourceExceed = (files) => {
   const fileExtension = files[0].name.replace(/.+\.(.+)/, '$1');
@@ -201,14 +204,15 @@ function readDataRange(worksheet, rangeFieldsFromLoad) {
 // 讀取來源
 function handleReadSourceData(loadData) {
   if (!sourceExcel.value) return alert('沒有來源資料!');
+  if (!sourceSheetName.value) return alert('請輸入來源工作表名稱!');
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsArrayBuffer(sourceExcel.value);
     reader.onload = function (e) {
       const data = new Uint8Array(reader.result);
       const book = xlsx.read(data, { type: 'array' });
-      const sheets = book.SheetNames[0];
-      const worksheet = book.Sheets[sheets];
+      // const sheets = book.SheetNames[0]; // get sheetname
+      const worksheet = book.Sheets[sourceSheetName.value];
 
       if (modeSwitch.value) {
         // 範圍資料讀取
@@ -657,6 +661,9 @@ const loadData = async (item) => {
       <div class="flex-1 flex flex-col justify-center text-center">
         <div class=" color-green-600">
           {{ sourceExcel?.name }}
+        </div>
+        <div v-if="!!sourceExcel">
+          <el-input v-model="sourceSheetName" placeholder="工作表名稱" />
         </div>
       </div>
 
