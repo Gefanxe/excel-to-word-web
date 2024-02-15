@@ -509,6 +509,7 @@ function handleClear() {
 
   // 資料
   sourceExcel.value = null;
+  sourceSheetName.value = null;
   sourceExcels.length = 0;
   sourceWords.length = 0;
 
@@ -548,6 +549,7 @@ const saveData = async () => {
   const _dataSet = {};
 
   _dataSet.sourceExcel = toRaw(sourceExcel.value);
+  _dataSet.sourceSheetName = toRaw(sourceSheetName.value);
   _dataSet.modeSwitch = toRaw(modeSwitch.value);
 
   _dataSet.partOfFileName = toRaw(partOfFileName.value);
@@ -594,6 +596,7 @@ const loadData = async (item) => {
   currentLoadFile.value = item.name;
 
   sourceExcel.value = item.dataSet.sourceExcel;
+  sourceSheetName.value = item.dataSet.sourceSheetName;
   modeSwitch.value = item.dataSet.modeSwitch;
   partOfFileName.value = item.dataSet.partOfFileName || '';
   if (modeSwitch.value) {
